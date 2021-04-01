@@ -2116,6 +2116,11 @@ pi_result piextDeviceCreateWithNativeHandle(pi_native_handle NativeHandle,
   return PI_SUCCESS;
 }
 
+pi_result piextGetPluginSpecificData(void **PlugInData) {
+  *PlugInData = nullptr;
+  return PI_SUCCESS;
+}
+
 pi_result piContextCreate(const pi_context_properties *Properties,
                           pi_uint32 NumDevices, const pi_device *Devices,
                           void (*PFnNotify)(const char *ErrInfo,
@@ -3854,6 +3859,17 @@ piEnqueueKernelLaunch(pi_queue Queue, pi_kernel Kernel, pi_uint32 WorkDim,
   if (auto Res = Queue->executeCommandList(ZeCommandList, ZeFence, false, true))
     return Res;
 
+  return PI_SUCCESS;
+}
+
+pi_result piEnqueueHostKernelLaunch(void *Kernel, pi_uint32 WorkDim,
+                                    const size_t *GlobalWorkOffset,
+                                    const size_t *GlobalWorkSize,
+                                    const size_t *LocalWorkSize,
+                                    pi_uint32 NumEventsInWaitList,
+                                    const pi_event *EventWaitList,
+                                    pi_event *Event) {
+  die("piEnqueueHostKernelLaunch : not implemented");
   return PI_SUCCESS;
 }
 

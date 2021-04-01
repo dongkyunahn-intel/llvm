@@ -57,14 +57,19 @@ enum TraceLevel {
 // Return true if we want to trace PI related activities.
 bool trace(TraceLevel level);
 
+// Return PluginSpecificData referenced by kernel code
+__SYCL_EXPORT void *getPluginSpecificData(backend be);
+
 #ifdef __SYCL_RT_OS_WINDOWS
 #define __SYCL_OPENCL_PLUGIN_NAME "pi_opencl.dll"
 #define __SYCL_LEVEL_ZERO_PLUGIN_NAME "pi_level_zero.dll"
 #define __SYCL_CUDA_PLUGIN_NAME "pi_cuda.dll"
+#define __SYCL_ESIMD_CPU_PLUGIN_NAME "pi_esimd_cpu.dll"
 #else
 #define __SYCL_OPENCL_PLUGIN_NAME "libpi_opencl.so"
 #define __SYCL_LEVEL_ZERO_PLUGIN_NAME "libpi_level_zero.so"
 #define __SYCL_CUDA_PLUGIN_NAME "libpi_cuda.so"
+#define __SYCL_ESIMD_CPU_PLUGIN_NAME "libpi_esimd_cpu.so"
 #endif
 
 // Report error and no return (keeps compiler happy about no return statements).

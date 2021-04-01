@@ -913,6 +913,9 @@ piextDeviceGetNativeHandle(pi_device device, pi_native_handle *nativeHandle);
 __SYCL_EXPORT pi_result piextDeviceCreateWithNativeHandle(
     pi_native_handle nativeHandle, pi_platform platform, pi_device *device);
 
+/// Returns plug-in specific data
+__SYCL_EXPORT pi_result piextGetPluginSpecificData(void **PlugInData);
+
 /// Selects the most appropriate device binary based on runtime information
 /// and the IR characteristics.
 ///
@@ -1308,6 +1311,12 @@ __SYCL_EXPORT pi_result piEnqueueKernelLaunch(
     const size_t *global_work_offset, const size_t *global_work_size,
     const size_t *local_work_size, pi_uint32 num_events_in_wait_list,
     const pi_event *event_wait_list, pi_event *event);
+
+__SYCL_EXPORT pi_result piEnqueueHostKernelLaunch(
+    void *Kernel, pi_uint32 WorkDim, const size_t *GlobalWorkOffset,
+    const size_t *GlobalWorkSize, const size_t *LocalWorkSize,
+    pi_uint32 NumEventsInWaitList, const pi_event *EventWaitList,
+    pi_event *Event);
 
 __SYCL_EXPORT pi_result piEnqueueNativeKernel(
     pi_queue queue, void (*user_func)(void *), void *args, size_t cb_args,
