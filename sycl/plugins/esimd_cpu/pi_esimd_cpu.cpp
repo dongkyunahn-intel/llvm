@@ -101,117 +101,117 @@ LAMBDA_WRAPPER_TMPL(sycl::nd_item<3>, NDITEM_3DIM, 3)
 #undef LAMBDA_WRAPPER_TMPL
 
 extern "C" inline void invokeLambda_ID_1DIM(void *Wrapper) {
-  auto *w = reinterpret_cast<LambdaWrapper_ID_1DIM *>(Wrapper);
+  auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_ID_1DIM *>(Wrapper);
 
-  PLACEHOLDER_UNUSED(w);
+  PLACEHOLDER_UNUSED(LambdaWrapper);
   // TODO : construct cl::sycl::id<1> instance using thread ID info
   // retrieved from CM and call Lambda function
-  // w->Func(id_1dim);
+  // LambdaWrapper->Func(id_1dim);
 }
 
 extern "C" inline void invokeLambda_ID_2DIM(void *Wrapper) {
-  auto *w = reinterpret_cast<LambdaWrapper_ID_2DIM *>(Wrapper);
+  auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_ID_2DIM *>(Wrapper);
 
-  PLACEHOLDER_UNUSED(w);
+  PLACEHOLDER_UNUSED(LambdaWrapper);
   // TODO : construct cl::sycl::id<2> instance using thread ID info
   // retrieved from CM and call Lambda function
-  // w->Func(id_2dim);
+  // LambdaWrapper->Func(id_2dim);
 }
 
 extern "C" inline void invokeLambda_ID_3DIM(void *Wrapper) {
-  auto *w = reinterpret_cast<LambdaWrapper_ID_3DIM *>(Wrapper);
+  auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_ID_3DIM *>(Wrapper);
 
-  PLACEHOLDER_UNUSED(w);
+  PLACEHOLDER_UNUSED(LambdaWrapper);
   // TODO : construct cl::sycl::id<3> instance using thread ID info
   // retrieved from CM and call Lambda function
-  // w->Func(id_3dim);
+  // LambdaWrapper->Func(id_3dim);
 }
 
 extern "C" inline void invokeLambda_ITEM_1DIM(void *Wrapper) {
-  auto *w = reinterpret_cast<LambdaWrapper_ITEM_1DIM *>(Wrapper);
+  auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_ITEM_1DIM *>(Wrapper);
 
-  PLACEHOLDER_UNUSED(w);
+  PLACEHOLDER_UNUSED(LambdaWrapper);
   // TODO : construct cl::sycl::item<1, false> instance using thread
   // ID info retrieved from CM and call Lambda function
-  // w->Func(item_1dim);
+  // LambdaWrapper->Func(item_1dim);
 }
 
 extern "C" inline void invokeLambda_ITEM_2DIM(void *Wrapper) {
-  auto *w = reinterpret_cast<LambdaWrapper_ITEM_2DIM *>(Wrapper);
+  auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_ITEM_2DIM *>(Wrapper);
 
-  PLACEHOLDER_UNUSED(w);
+  PLACEHOLDER_UNUSED(LambdaWrapper);
   // TODO : construct cl::sycl::item<2, false> instance using thread
   // ID info retrieved from CM and call Lambda function
-  // w->Func(item_2dim);
+  // LambdaWrapper->Func(item_2dim);
 }
 
 extern "C" inline void invokeLambda_ITEM_3DIM(void *Wrapper) {
-  auto *w = reinterpret_cast<LambdaWrapper_ITEM_3DIM *>(Wrapper);
+  auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_ITEM_3DIM *>(Wrapper);
 
-  PLACEHOLDER_UNUSED(w);
+  PLACEHOLDER_UNUSED(LambdaWrapper);
   // TODO : construct cl::sycl::item<3, false> instance using thread
   // ID info retrieved from CM and call Lambda function
-  // w->Func(item_3dim);
+  // LambdaWrapper->Func(item_3dim);
 }
 
 extern "C" inline void invokeLambda_ITEM_OFFSET_1DIM(void *Wrapper) {
-  auto *w = reinterpret_cast<LambdaWrapper_ITEM_OFFSET_1DIM *>(Wrapper);
+  auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_ITEM_OFFSET_1DIM *>(Wrapper);
 
-  PLACEHOLDER_UNUSED(w);
+  PLACEHOLDER_UNUSED(LambdaWrapper);
   // TODO : construct cl::sycl::item<1, true> instance using thread
   // ID info retrieved from CM with GlobalOffset info and call Lambda
   // function
-  // w->Func(item_offset_1dim);
+  // LambdaWrapper->Func(item_offset_1dim);
 }
 
 extern "C" inline void invokeLambda_ITEM_OFFSET_2DIM(void *Wrapper) {
-  auto *w = reinterpret_cast<LambdaWrapper_ITEM_OFFSET_2DIM *>(Wrapper);
+  auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_ITEM_OFFSET_2DIM *>(Wrapper);
 
-  PLACEHOLDER_UNUSED(w);
+  PLACEHOLDER_UNUSED(LambdaWrapper);
   // TODO : construct cl::sycl::item<2, true> instance using thread
   // ID info retrieved from CM with GlobalOffset info and call Lambda
   // function
-  // w->Func(item_offset_2dim);
+  // LambdaWrapper->Func(item_offset_2dim);
 }
 
 extern "C" inline void invokeLambda_ITEM_OFFSET_3DIM(void *Wrapper) {
-  auto *w = reinterpret_cast<LambdaWrapper_ITEM_OFFSET_3DIM *>(Wrapper);
+  auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_ITEM_OFFSET_3DIM *>(Wrapper);
 
-  PLACEHOLDER_UNUSED(w);
+  PLACEHOLDER_UNUSED(LambdaWrapper);
   // TODO : construct cl::sycl::item<3, true> instance using thread
   // ID info retrieved from CM with GlobalOffset info and call Lambda
   // function
-  // w->Func(item_offset_3dim);
+  // LambdaWrapper->Func(item_offset_3dim);
 }
 
 extern "C" inline void invokeLambda_NDITEM_1DIM(void *Wrapper) {
-  auto *w = reinterpret_cast<LambdaWrapper_NDITEM_1DIM *>(Wrapper);
+  auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_NDITEM_1DIM *>(Wrapper);
 
-  PLACEHOLDER_UNUSED(w);
+  PLACEHOLDER_UNUSED(LambdaWrapper);
   // TODO : construct cl::sycl::nd_item<1> instance using thread ID
   // info retrieved from CM with GlobalOffset/GlobalSize/LocalSize
   // info and call Lambda function
-  // w->Func(nd_item_1dim);
+  // LambdaWrapper->Func(nd_item_1dim);
 }
 
 extern "C" inline void invokeLambda_NDITEM_2DIM(void *Wrapper) {
-  auto *w = reinterpret_cast<LambdaWrapper_NDITEM_2DIM *>(Wrapper);
+  auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_NDITEM_2DIM *>(Wrapper);
 
-  PLACEHOLDER_UNUSED(w);
+  PLACEHOLDER_UNUSED(LambdaWrapper);
   // TODO : construct cl::sycl::nd_item<2> instance using thread ID
   // info retrieved from CM with GlobalOffset/GlobalSize/LocalSize
   // info and call Lambda function
-  // w->Func(nd_item_2dim);
+  // LambdaWrapper->Func(nd_item_2dim);
 }
 
 extern "C" inline void invokeLambda_NDITEM_3DIM(void *Wrapper) {
-  auto *w = reinterpret_cast<LambdaWrapper_NDITEM_3DIM *>(Wrapper);
+  auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_NDITEM_3DIM *>(Wrapper);
 
-  PLACEHOLDER_UNUSED(w);
+  PLACEHOLDER_UNUSED(LambdaWrapper);
   // TODO : construct cl::sycl::nd_item<3> instance using thread ID
   // info retrieved from CM with GlobalOffset/GlobalSize/LocalSize
   // info and call Lambda function
-  // w->Func(nd_item_3dim);
+  // LambdaWrapper->Func(nd_item_3dim);
 }
 
 // libCMBatch class defines interface for lauching kernels with
@@ -476,7 +476,7 @@ struct ESIMDDeviceInterfaceImpl : public ESIMDDeviceInterface {
   ESIMDDeviceInterfaceImpl() {
 #ifdef __GNUC__
     // Linux
-    void *handle = dlopen("libcm.so", RTLD_LAZY);
+    void *handle = dlopen("libcm.so", RTLD_LAZY | RTLD_NODELETE);
 #define DLSYM_MAPPING(VAR, TYPE, SYMBOL)                                       \
   VAR = (TYPE)(dlsym(handle, SYMBOL));                                         \
   assert(VAR != nullptr);
@@ -495,6 +495,7 @@ struct ESIMDDeviceInterfaceImpl : public ESIMDDeviceInterface {
     DLSYM_MAPPING(set_slm_size_ptr, SlmSizePtr_t, "_Z11cm_slm_initj");
 
 #undef DLSYM_MAPPING
+    dlclose(handle);
 #else
     // Windows
     HINSTANCE hcmLib = LoadLibrary(TEXT("libcm.dll"));
@@ -515,6 +516,7 @@ struct ESIMDDeviceInterfaceImpl : public ESIMDDeviceInterface {
     PROC_MAPPING(get_slm_base_ptr, SlmBasePtr_t, "?__cm_emu_get_slm@@YAPEADXZ");
     PROC_MAPPING(set_slm_size_ptr, SlmSizePtr_t, "?cm_slm_init@@YAXI@Z");
 #undef PROC_MAPPING
+    // TODO : FreeLibrary without unloading 'libcm.dll'
 #endif
   }
 
@@ -616,11 +618,6 @@ pi_result piextDeviceGetNativeHandle(pi_device Device,
 pi_result piextDeviceCreateWithNativeHandle(pi_native_handle nativeHandle,
                                             pi_platform platform,
                                             pi_device *device) {
-  DIE_NO_IMPLEMENTATION;
-  return PI_SUCCESS;
-}
-
-pi_result piextGetPluginSpecificData(void **PlugInData) {
   DIE_NO_IMPLEMENTATION;
   return PI_SUCCESS;
 }
@@ -923,17 +920,6 @@ piEnqueueKernelLaunch(pi_queue Queue, pi_kernel Kernel, pi_uint32 WorkDim,
                       const size_t *GlobalWorkSize, const size_t *LocalWorkSize,
                       pi_uint32 NumEventsInWaitList,
                       const pi_event *EventWaitList, pi_event *Event) {
-  DIE_NO_IMPLEMENTATION;
-  return PI_SUCCESS;
-}
-
-pi_result piEnqueueHostKernelLaunch(void *Kernel, pi_uint32 WorkDim,
-                                    const size_t *GlobalWorkOffset,
-                                    const size_t *GlobalWorkSize,
-                                    const size_t *LocalWorkSize,
-                                    pi_uint32 NumEventsInWaitList,
-                                    const pi_event *EventWaitList,
-                                    pi_event *Event) {
   DIE_NO_IMPLEMENTATION;
   return PI_SUCCESS;
 }

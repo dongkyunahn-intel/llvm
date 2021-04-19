@@ -10,6 +10,10 @@
 /// Declarations for ESIMD_CPU-device specific definitions.
 /// ESIMD intrinsic and LibCM functionalities required by intrinsic defined
 ///
+/// This interface is for ESIMD intrinsic emulation implementations
+/// such as slm_access to access ESIMD_CPU specific-support therefore
+/// it has to be defined and shared as include directory
+///
 /// \ingroup sycl_pi_esimd_cpu
 
 #pragma once
@@ -17,6 +21,7 @@
 #include <cstdint>
 
 #ifdef _MSC_VER
+// Definitions for type consistency between ESIMD_CPU and CM_EMU
 typedef unsigned int uint;
 typedef unsigned short ushort;
 typedef unsigned char uchar;
