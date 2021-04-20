@@ -155,7 +155,8 @@ extern "C" inline void invokeLambda_ITEM_3DIM(void *Wrapper) {
 }
 
 extern "C" inline void invokeLambda_ITEM_OFFSET_1DIM(void *Wrapper) {
-  auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_ITEM_OFFSET_1DIM *>(Wrapper);
+  auto *LambdaWrapper =
+      reinterpret_cast<LambdaWrapper_ITEM_OFFSET_1DIM *>(Wrapper);
 
   PLACEHOLDER_UNUSED(LambdaWrapper);
   // TODO : construct cl::sycl::item<1, true> instance using thread
@@ -165,7 +166,8 @@ extern "C" inline void invokeLambda_ITEM_OFFSET_1DIM(void *Wrapper) {
 }
 
 extern "C" inline void invokeLambda_ITEM_OFFSET_2DIM(void *Wrapper) {
-  auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_ITEM_OFFSET_2DIM *>(Wrapper);
+  auto *LambdaWrapper =
+      reinterpret_cast<LambdaWrapper_ITEM_OFFSET_2DIM *>(Wrapper);
 
   PLACEHOLDER_UNUSED(LambdaWrapper);
   // TODO : construct cl::sycl::item<2, true> instance using thread
@@ -175,7 +177,8 @@ extern "C" inline void invokeLambda_ITEM_OFFSET_2DIM(void *Wrapper) {
 }
 
 extern "C" inline void invokeLambda_ITEM_OFFSET_3DIM(void *Wrapper) {
-  auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_ITEM_OFFSET_3DIM *>(Wrapper);
+  auto *LambdaWrapper =
+      reinterpret_cast<LambdaWrapper_ITEM_OFFSET_3DIM *>(Wrapper);
 
   PLACEHOLDER_UNUSED(LambdaWrapper);
   // TODO : construct cl::sycl::item<3, true> instance using thread
