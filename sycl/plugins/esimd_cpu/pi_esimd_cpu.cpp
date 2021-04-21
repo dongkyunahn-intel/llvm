@@ -479,10 +479,12 @@ struct ESIMDDeviceInterfaceImpl : public ESIMDDeviceInterface {
   ESIMDDeviceInterfaceImpl() {
 #ifdef __GNUC__
     // Linux
+    // RTDL_NODELETE for keeping the shared object after dlclose()
     void *handle = dlopen("libcm.so", RTLD_LAZY | RTLD_NODELETE);
+    assert(handle != nullptr && "libcm.so is missing");
 #define DLSYM_MAPPING(VAR, TYPE, SYMBOL)                                       \
   VAR = (TYPE)(dlsym(handle, SYMBOL));                                         \
-  assert(VAR != nullptr);
+  assert(VAR != nullptr && SYMBOL " is missing in libcm.so");
 
     // Intrinsics
     DLSYM_MAPPING(grp_barrier_ptr, BarrierPtr_t, "_Z10cm_barrierv");
@@ -502,9 +504,10 @@ struct ESIMDDeviceInterfaceImpl : public ESIMDDeviceInterface {
 #else
     // Windows
     HINSTANCE hcmLib = LoadLibrary(TEXT("libcm.dll"));
+    assert(hcmLib != nullptr && "libcm.dll is missing");
 #define PROC_MAPPING(VAR, TYPE, SYMBOL)                                        \
   VAR = (TYPE)(GetProcAddress(hcmLib, SYMBOL));                                \
-  assert(VAR != nullptr);
+  assert(VAR != nullptr && SYMBOL " is missing in libcm.dll");
 
     // Intrinsics
     PROC_MAPPING(grp_barrier_ptr, BarrierPtr_t, "?cm_barrier@@YAXXZ");
