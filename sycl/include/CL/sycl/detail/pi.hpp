@@ -57,9 +57,6 @@ enum TraceLevel {
 // Return true if we want to trace PI related activities.
 bool trace(TraceLevel level);
 
-// Return PluginSpecificData referenced by kernel code
-__SYCL_EXPORT void *getPluginSpecificData(backend be);
-
 #ifdef __SYCL_RT_OS_WINDOWS
 #define __SYCL_OPENCL_PLUGIN_NAME "pi_opencl.dll"
 #define __SYCL_LEVEL_ZERO_PLUGIN_NAME "pi_level_zero.dll"
