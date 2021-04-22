@@ -456,88 +456,33 @@ public:
 /// Implementation for ESIMD_CPU device interface accessing ESIMD
 /// intrinsics and LibCM functionalties requred by intrinsics
 struct ESIMDDeviceInterfaceImpl : public ESIMDDeviceInterface {
-  // Function pointer type definitions
-  using BarrierPtr_t = void (*)(void);
-  using SplitBarrierPtr_t = void (*)(uint);
-  using MemoryBasePtr_t = char *(*)(int);
-  using SlmBasePtr_t = char *(*)(void);
-  using SlmSizePtr_t = void (*)(size_t);
-
-  // Function pointers
-
   // Intrinsics
-  BarrierPtr_t grp_barrier_ptr;
-  SplitBarrierPtr_t split_barrier_ptr;
-  BarrierPtr_t fence_ptr;
-
-  // libcm functionalities used for intrinsics such as
-  // surface/buffer/slm access
-  MemoryBasePtr_t get_surface_base_ptr;
-  SlmBasePtr_t get_slm_base_ptr;
-  SlmSizePtr_t set_slm_size_ptr;
-
-  ESIMDDeviceInterfaceImpl() {
-#ifdef __GNUC__
-    // Linux
-    // RTDL_NODELETE for keeping the shared object after dlclose()
-    void *handle = dlopen("libcm.so", RTLD_LAZY | RTLD_NODELETE);
-    assert(handle != nullptr && "libcm.so is missing");
-#define DLSYM_MAPPING(VAR, TYPE, SYMBOL)                                       \
-  VAR = (TYPE)(dlsym(handle, SYMBOL));                                         \
-  assert(VAR != nullptr && SYMBOL " is missing in libcm.so");
-
-    // Intrinsics
-    DLSYM_MAPPING(grp_barrier_ptr, BarrierPtr_t, "_Z10cm_barrierv");
-    DLSYM_MAPPING(split_barrier_ptr, SplitBarrierPtr_t, "_Z11cm_sbarrierj");
-    DLSYM_MAPPING(fence_ptr, BarrierPtr_t,
-                  "_Z8cm_fencev"); // With/without bitmask?
-
-    // libcm functionalities used for intrinsics such as surface/slm
-    // access
-    DLSYM_MAPPING(get_surface_base_ptr, MemoryBasePtr_t,
-                  "_Z21get_surface_base_addri");
-    DLSYM_MAPPING(get_slm_base_ptr, SlmBasePtr_t, "_Z16__cm_emu_get_slmv");
-    DLSYM_MAPPING(set_slm_size_ptr, SlmSizePtr_t, "_Z11cm_slm_initj");
-
-#undef DLSYM_MAPPING
-    dlclose(handle);
-#else
-    // Windows
-    HINSTANCE hcmLib = LoadLibrary(TEXT("libcm.dll"));
-    assert(hcmLib != nullptr && "libcm.dll is missing");
-#define PROC_MAPPING(VAR, TYPE, SYMBOL)                                        \
-  VAR = (TYPE)(GetProcAddress(hcmLib, SYMBOL));                                \
-  assert(VAR != nullptr && SYMBOL " is missing in libcm.dll");
-
-    // Intrinsics
-    PROC_MAPPING(grp_barrier_ptr, BarrierPtr_t, "?cm_barrier@@YAXXZ");
-    PROC_MAPPING(split_barrier_ptr, SplitBarrierPtr_t, "?cm_sbarrier@@YAXI@Z");
-    PROC_MAPPING(fence_ptr, BarrierPtr_t,
-                 "?cm_fence@@YAXXZ"); // With/without bitmask?
-
-    // libcm functionalities used for intrinsics such as surface/slm
-    // access
-    PROC_MAPPING(get_surface_base_ptr, MemoryBasePtr_t,
-                 "?get_surface_base_addr@@YAPEADH@Z");
-    PROC_MAPPING(get_slm_base_ptr, SlmBasePtr_t, "?__cm_emu_get_slm@@YAPEADXZ");
-    PROC_MAPPING(set_slm_size_ptr, SlmSizePtr_t, "?cm_slm_init@@YAXI@Z");
-#undef PROC_MAPPING
-    // TODO : FreeLibrary without unloading 'libcm.dll'
-#endif
+  void mt_barrier() override {
+    // TODO : Call barrier intrinsic provided from libCM
   }
-
-  // Intrinsics
-  void mt_barrier() override { grp_barrier_ptr(); }
-  void split_barrier(uint flag) override { split_barrier_ptr(flag); }
-  void fence() override { fence_ptr(); }
+  void split_barrier(uint flag) override {
+    PLACEHOLDER_UNUSED(flag);
+    // TODO : Call split_barrier intrinsic provided from libCM
+  }
+  void fence() override {
+    // TODO : Call fence intrinsic provided from libCM
+  }
 
   // libcm functionalities used for intrinsics such as
   // surface/buffer/slm access
   char *get_surface_base(int surfaceID) override {
-    return get_surface_base_ptr(surfaceID);
+    PLACEHOLDER_UNUSED(surfaceID);
+    // TODO : Return surface base address retrieved from libCM
+    return nullptr;
   }
-  char *get_slm() override { return get_slm_base_ptr(); }
-  void set_slm_size(size_t size) override { set_slm_size_ptr(size); }
+  char *get_slm() override {
+    // TODO : Return SLM base address retrieved from libCM
+    return nullptr;
+  }
+  void set_slm_size(size_t size) override {
+    PLACEHOLDER_UNUSED(size);
+    // TODO : Set slm size by caling slm initialization in libCM
+  }
 };
 
 extern "C" {
