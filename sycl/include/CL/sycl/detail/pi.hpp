@@ -55,7 +55,7 @@ enum TraceLevel {
 };
 
 // Return true if we want to trace PI related activities.
-bool trace(TraceLevel level);
+__SYCL_EXPORT bool trace(TraceLevel level);
 
 #ifdef __SYCL_RT_OS_WINDOWS
 #define __SYCL_OPENCL_PLUGIN_NAME "pi_opencl.dll"
@@ -151,7 +151,7 @@ extern std::shared_ptr<plugin> GlobalPlugin;
 const vector_class<plugin> &initialize();
 
 // Get the plugin serving given backend.
-template <backend BE> const plugin &getPlugin();
+template <backend BE> __SYCL_EXPORT const plugin &getPlugin();
 
 // Utility Functions to get Function Name for a PI Api.
 template <PiApiKind PiApiOffset> struct PiFuncInfo {};

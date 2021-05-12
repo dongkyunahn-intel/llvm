@@ -16,7 +16,7 @@ add_dependencies(sycl-toolchain pi_esimd_cpu)
 add_dependencies(pi_esimd_cpu
   ocl-headers)
 
-target_link_libraries(pi_esimd_cpu PRIVATE sycl ${CMAKE_DL_LIBS})
+target_link_libraries(pi_esimd_cpu PRIVATE sycl)
 set_target_properties(pi_esimd_cpu PROPERTIES LINKER_LANGUAGE CXX)
 
 add_common_options(pi_esimd_cpu)

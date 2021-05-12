@@ -50,6 +50,13 @@
 
 #define PLACEHOLDER_UNUSED(x) (void)x
 
+// Global variables used in PI_esimd_cpu
+// Note we only create a simple pointer variables such that C++ RT won't
+// deallocate them automatically at the end of the main program.
+// The heap memory allocated for this global variable reclaimed only when
+// Sycl RT calls piTearDown().
+static OpaqueDataAccess *PiESimdDeviceAccess;
+
 using IDBuilder = sycl::detail::Builder;
 
 // Lambda-call interface definition.
@@ -453,37 +460,21 @@ public:
   }
 };
 
-/// Implementation for ESIMD_CPU device interface accessing ESIMD
-/// intrinsics and LibCM functionalties requred by intrinsics
-struct ESIMDDeviceInterfaceImpl : public ESIMDDeviceInterface {
-  // Intrinsics
-  void mt_barrier() override {
-    // TODO : Call barrier intrinsic provided from libCM
-  }
-  void split_barrier(uint flag) override {
-    PLACEHOLDER_UNUSED(flag);
-    // TODO : Call split_barrier intrinsic provided from libCM
-  }
-  void fence() override {
-    // TODO : Call fence intrinsic provided from libCM
-  }
+// Intrinsics
+ESIMDDeviceInterface::ESIMDDeviceInterface() {
+  reserved = nullptr;
 
-  // libcm functionalities used for intrinsics such as
-  // surface/buffer/slm access
-  char *get_surface_base(int surfaceID) override {
-    PLACEHOLDER_UNUSED(surfaceID);
-    // TODO : Return surface base address retrieved from libCM
-    return nullptr;
-  }
-  char *get_slm() override {
-    // TODO : Return SLM base address retrieved from libCM
-    return nullptr;
-  }
-  void set_slm_size(size_t size) override {
-    PLACEHOLDER_UNUSED(size);
-    // TODO : Set slm size by caling slm initialization in libCM
-  }
-};
+  /// TODO : Fill *_ptr fields with function pointers from CM
+  /// functions prefixed with 'cm_support'
+
+  cm_barrier_ptr = nullptr;  /* cm_support::barrier; */
+  cm_sbarrier_ptr = nullptr; /* cm_support::split_barrier; */
+  cm_fence_ptr = nullptr;    /* cm_support::fence; */
+
+  sycl_get_surface_base_ptr = nullptr; /* cm_support::get_surface_base_addr; */
+  __cm_emu_get_slm_ptr = nullptr;      /* cm_support::get_slm_base; */
+  cm_slm_init_ptr = nullptr;           /* cm_support::init_slm; */
+}
 
 extern "C" {
 
@@ -1161,6 +1152,11 @@ pi_result piextUSMSharedAlloc(void **ResultPtr, pi_context Context,
   return PI_SUCCESS;
 }
 
+pi_result piextUSMFree(pi_context Context, void *Ptr) {
+  DIE_NO_IMPLEMENTATION;
+  return PI_SUCCESS;
+}
+
 pi_result piextKernelSetArgPointer(pi_kernel Kernel, pi_uint32 ArgIndex,
                                    size_t ArgSize, const void *ArgValue) {
   DIE_NO_IMPLEMENTATION;
@@ -1229,13 +1225,34 @@ pi_result piextUSMEnqueuePrefetch(pi_queue Queue, const void *Ptr, size_t Size,
   return PI_SUCCESS;
 }
 
+pi_result piextPluginGetOpaqueData(void *opaque_data_param,
+                                   void **opaque_data_return) {
+  *opaque_data_return = reinterpret_cast<void *>(PiESimdDeviceAccess);
+  return PI_SUCCESS;
+}
+
 pi_result piTearDown(void *PluginParameter) {
-  CONTINUE_NO_IMPLEMENTATION;
+  delete PiESimdDeviceAccess->interface;
+  delete PiESimdDeviceAccess;
   return PI_SUCCESS;
 }
 
 pi_result piPluginInit(pi_plugin *PluginInit) {
-  DIE_NO_IMPLEMENTATION;
+  assert(PluginInit);
+  size_t PluginVersionSize = sizeof(PluginInit->PluginVersion);
+  assert(strlen(_PI_H_VERSION_STRING) < PluginVersionSize);
+  strncpy(PluginInit->PluginVersion, _PI_H_VERSION_STRING, PluginVersionSize);
+
+  PiESimdDeviceAccess = new OpaqueDataAccess();
+  // 'version' to be compared with 'ESIMD_CPU_DEVICE_REQUIRED_VER' defined in
+  // device interface file
+  PiESimdDeviceAccess->version = 0;
+  PiESimdDeviceAccess->interface = new ESIMDDeviceInterface();
+
+#define _PI_API(api)                                                           \
+  (PluginInit->PiFunctionTable).api = (decltype(&::api))(&api);
+#include <CL/sycl/detail/pi.def>
+
   return PI_SUCCESS;
 }
 

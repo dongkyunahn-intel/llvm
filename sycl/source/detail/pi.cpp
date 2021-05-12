@@ -16,10 +16,10 @@
 #include <CL/sycl/detail/common.hpp>
 #include <CL/sycl/detail/device_filter.hpp>
 #include <CL/sycl/detail/pi.hpp>
+#include <CL/sycl/detail/plugin.hpp>
 #include <CL/sycl/detail/stl_type_traits.hpp>
 #include <detail/config.hpp>
 #include <detail/global_handler.hpp>
-#include <detail/plugin.hpp>
 
 #include <bitset>
 #include <cstdarg>
@@ -426,6 +426,7 @@ template <backend BE> const plugin &getPlugin() {
 
 template const plugin &getPlugin<backend::opencl>();
 template const plugin &getPlugin<backend::level_zero>();
+template const plugin &getPlugin<backend::esimd_cpu>();
 
 // Report error and no return (keeps compiler from printing warnings).
 // TODO: Probably change that to throw a catchable exception,

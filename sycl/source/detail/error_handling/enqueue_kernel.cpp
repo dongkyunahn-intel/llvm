@@ -14,7 +14,7 @@
 
 #include <CL/sycl/backend_types.hpp>
 #include <CL/sycl/detail/pi.hpp>
-#include <detail/plugin.hpp>
+#include <CL/sycl/detail/plugin.hpp>
 
 __SYCL_INLINE_NAMESPACE(cl) {
 namespace sycl {

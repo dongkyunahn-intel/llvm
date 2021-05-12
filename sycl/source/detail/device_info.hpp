@@ -11,13 +11,13 @@
 #include <CL/sycl/detail/defines.hpp>
 #include <CL/sycl/detail/os_util.hpp>
 #include <CL/sycl/detail/pi.hpp>
+#include <CL/sycl/detail/plugin.hpp>
 #include <CL/sycl/device.hpp>
 #include <CL/sycl/info/info_desc.hpp>
 #include <CL/sycl/platform.hpp>
 #include <detail/device_impl.hpp>
 #include <detail/platform_impl.hpp>
 #include <detail/platform_util.hpp>
-#include <detail/plugin.hpp>
 
 #include <chrono>
 #include <thread>

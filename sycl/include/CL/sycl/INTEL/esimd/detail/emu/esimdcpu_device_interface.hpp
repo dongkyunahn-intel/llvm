@@ -18,7 +18,10 @@
 
 #pragma once
 
+#include <CL/sycl/detail/plugin.hpp>
 #include <cstdint>
+
+#define ESIMD_CPU_DEVICE_REQUIRED_VER 0
 
 #ifdef _MSC_VER
 // Definitions for type consistency between ESIMD_CPU and CM_EMU
@@ -28,15 +31,38 @@ typedef unsigned char uchar;
 #endif // _MSC_VER
 
 struct ESIMDDeviceInterface {
+  void *reserved;
 
-  // Intrinsics
-  virtual void mt_barrier() = 0;
-  virtual void split_barrier(uint) = 0;
-  virtual void fence() = 0;
-
-  // libcm functionalities used for intrinsics such as
-  // surface/buffer/slm access
-  virtual char *get_surface_base(int surfaceID) = 0;
-  virtual char *get_slm() = 0;
-  virtual void set_slm_size(size_t size) = 0;
+  ESIMDDeviceInterface();
+#include "esimd_emu_functions_v0.h"
 };
+
+struct OpaqueDataAccess {
+  uintptr_t version;
+  struct ESIMDDeviceInterface *interface;
+};
+
+ESIMDDeviceInterface *getESIMDDeviceInterface() {
+  void *RawOpaqueDataAccess;
+
+  const auto &esimdPlugin =
+      cl::sycl::detail::pi::getPlugin<cl::sycl::backend::esimd_cpu>();
+  esimdPlugin.call<cl::sycl::detail::PiApiKind::piextPluginGetOpaqueData>(
+      nullptr, &RawOpaqueDataAccess);
+
+  OpaqueDataAccess *dataAccess =
+      reinterpret_cast<OpaqueDataAccess *>(RawOpaqueDataAccess);
+
+  if (dataAccess->version != ESIMD_CPU_DEVICE_REQUIRED_VER) {
+    // TODO : version < ESIMD_CPU_DEVICE_REQUIRED_VER when
+    // ESIMD_CPU_DEVICE_REQUIRED_VER becomes larger than 0
+    std::cerr << __FUNCTION__
+              << "The device interface version provided from plug-in "
+              << "library is behind required device interface version"
+              << std::endl
+              << "Device version : " << dataAccess->version << std::endl
+              << "Required version :" << dataAccess->version << std::endl;
+    throw cl::sycl::feature_not_supported();
+  }
+  return dataAccess->interface;
+}

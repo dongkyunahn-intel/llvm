@@ -636,7 +636,11 @@ inline ESIMD_NODEBUG void esimd_sbarrier(EsimdSbarrierType flag) {
 /// @{
 
 /// Declare per-work-group slm size.
+#ifdef __SYCL_DEVICE_ONLY__
 SYCL_EXTERNAL void slm_init(uint32_t size);
+#else // __SYCL_DEVICE_ONLY__
+SYCL_EXTERNAL void slm_init(uint32_t size) { __esimd_slm_init((size_t)size);}
+#endif // __SYCL_DEVICE_ONLY__
 
 /// SLM gather.
 ///
