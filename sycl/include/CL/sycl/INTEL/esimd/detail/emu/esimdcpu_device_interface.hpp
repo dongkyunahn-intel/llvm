@@ -45,26 +45,44 @@ struct OpaqueDataAccess {
 };
 
 ESIMDDeviceInterface *getESIMDDeviceInterface() {
-  void *RawOpaqueDataAccess;
+  // TODO (performance) cache the interface pointer, can make a difference when
+  // calling fine-grained libCM APIs through it (like memory access in a tight
+  // loop)
+  PluginOpaqueData *OpaqueData = nullptr;
 
-  const auto &esimdPlugin =
+  const auto &EsimdPlugin =
       cl::sycl::detail::pi::getPlugin<cl::sycl::backend::esimd_cpu>();
-  esimdPlugin.call<cl::sycl::detail::PiApiKind::piextPluginGetOpaqueData>(
-      nullptr, &RawOpaqueDataAccess);
+  EsimdPlugin.call<cl::sycl::detail::PiApiKind::piextPluginGetOpaqueData>(
+      nullptr, &OpaqueData);
 
-  OpaqueDataAccess *dataAccess =
-      reinterpret_cast<OpaqueDataAccess *>(RawOpaqueDataAccess);
+  // First check if opaque data version is compatible. 
+  if (OpaqueData->version != ESIMD_EMU_PLUGIN_OPAQUE_DATA_VERSION) {
+    // NOTE: the version check should always be '!=' as layouts of different
+    // versions of PluginOpaqueData is not backward compatible, unlike
+    // layout of the ESIMDDeviceInterface.
 
-  if (dataAccess->version != ESIMD_CPU_DEVICE_REQUIRED_VER) {
-    // TODO : version < ESIMD_CPU_DEVICE_REQUIRED_VER when
-    // ESIMD_CPU_DEVICE_REQUIRED_VER becomes larger than 0
+    std::cerr << __FUNCTION__
+              << "Opaque data returned by ESIMD Emu plugin is incompatible with"
+              << "the one used in current implementation."  << std::endl
+              << "Returned version : " << OpaqueData->version << std::endl
+              << "Required version : " << ESIMD_EMU_PLUGIN_OPAQUE_DATA_VERSION
+              << std::endl;
+    throw cl::sycl::feature_not_supported();
+  }
+  // Opaque data version is OK, can cast the 'data' field.
+  ESIMDDeviceInterface *Intf =
+    reinterpret_cast<ESIMDDeviceInterface*>(OpaqueData->data);
+
+  // Now check that device interface version is compatible. 
+  if (Intf->version < ESIMD_DEVICE_INTERFACE_VERSION) {
     std::cerr << __FUNCTION__
               << "The device interface version provided from plug-in "
               << "library is behind required device interface version"
               << std::endl
-              << "Device version : " << dataAccess->version << std::endl
-              << "Required version :" << dataAccess->version << std::endl;
+              << "Found version : " << Intf->version << std::endl
+              << "Required version :" << ESIMD_DEVICE_INTERFACE_VERSION
+              << std::endl;
     throw cl::sycl::feature_not_supported();
   }
-  return dataAccess->interface;
+  return Intf;
 }
