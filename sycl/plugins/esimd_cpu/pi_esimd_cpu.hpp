@@ -1,4 +1,4 @@
-//===---------- pi_esimd_cpu.cpp - CM Emulation Plugin --------------------===//
+//===---------- pi_esimd_cpu.hpp - CM Emulation Plugin --------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
