@@ -21,7 +21,9 @@
 #include <CL/sycl/detail/plugin.hpp>
 #include <cstdint>
 
-#define ESIMD_CPU_DEVICE_REQUIRED_VER 0
+/// This is the device interface version required (and used) by this implementation of
+/// the ESIMD CPU emulator.
+#define ESIMD_DEVICE_INTERFACE_VERSION 0
 
 #ifdef _MSC_VER
 // Definitions for type consistency between ESIMD_CPU and CM_EMU
