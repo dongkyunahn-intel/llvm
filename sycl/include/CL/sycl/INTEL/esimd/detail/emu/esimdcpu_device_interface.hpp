@@ -39,10 +39,15 @@ struct ESIMDDeviceInterface {
 #include "esimd_emu_functions_v0.h"
 };
 
-struct OpaqueDataAccess {
-  uintptr_t version;
-  struct ESIMDDeviceInterface *interface;
-};
+
+// Denotes the data version used by the implementation.
+// Increment whenever the 'data' field interpretation within PluginOpaqueData is changed.
+#define ESIMD_EMU_PLUGIN_OPAQUE_DATA_VERSION 0
+
+// The table below shows the correspondence between the \c version
+// and the contents of the \c data field for ESIMD CPU Emulator plugin
+// instantiation of the \c PluginOpaqueData structure:
+// version == 0, data is ESIMDDeviceInterface*
 
 ESIMDDeviceInterface *getESIMDDeviceInterface() {
   // TODO (performance) cache the interface pointer, can make a difference when
