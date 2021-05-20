@@ -55,7 +55,7 @@ ESIMDDeviceInterface *getESIMDDeviceInterface() {
   // loop)
   PluginOpaqueData *OpaqueData = nullptr;
 
-  const auto &EsimdPlugin =
+  const plugin &EsimdPlugin =
       cl::sycl::detail::pi::getPlugin<cl::sycl::backend::esimd_cpu>();
   EsimdPlugin.call<cl::sycl::detail::PiApiKind::piextPluginGetOpaqueData>(
       nullptr, &OpaqueData);
