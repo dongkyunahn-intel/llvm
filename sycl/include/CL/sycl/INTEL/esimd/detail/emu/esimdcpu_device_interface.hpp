@@ -75,7 +75,7 @@ ESIMDDeviceInterface *getESIMDDeviceInterface() {
     throw cl::sycl::feature_not_supported();
   }
   // Opaque data version is OK, can cast the 'data' field.
-  ESIMDDeviceInterface *Intf =
+  ESIMDDeviceInterface *Interface =
     reinterpret_cast<ESIMDDeviceInterface*>(OpaqueData->data);
 
   // Now check that device interface version is compatible. 
