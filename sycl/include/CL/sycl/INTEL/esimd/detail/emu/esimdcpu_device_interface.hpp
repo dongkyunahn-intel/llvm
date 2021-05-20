@@ -51,8 +51,7 @@ struct ESIMDEmuPluginOpaqueData {
   void *data;
 };
 // The table below shows the correspondence between the \c version
-// and the contents of the \c data field for ESIMD CPU Emulator plugin
-// instantiation of the \c PluginOpaqueData structure:
+// and the contents of the \c data field:
 // version == 0, data is ESIMDDeviceInterface*
 
 ESIMDDeviceInterface *getESIMDDeviceInterface() {
