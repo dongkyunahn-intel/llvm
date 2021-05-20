@@ -58,7 +58,7 @@ ESIMDDeviceInterface *getESIMDDeviceInterface() {
   // TODO (performance) cache the interface pointer, can make a difference when
   // calling fine-grained libCM APIs through it (like memory access in a tight
   // loop)
-  PluginOpaqueData *OpaqueData = nullptr;
+  ESIMDEmuPluginOpaqueData *OpaqueData = nullptr;
 
   const plugin &EsimdPlugin =
       cl::sycl::detail::pi::getPlugin<cl::sycl::backend::esimd_cpu>();
