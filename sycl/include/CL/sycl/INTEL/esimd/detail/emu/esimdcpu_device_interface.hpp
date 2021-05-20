@@ -43,7 +43,13 @@ struct ESIMDDeviceInterface {
 // Denotes the data version used by the implementation.
 // Increment whenever the 'data' field interpretation within PluginOpaqueData is changed.
 #define ESIMD_EMU_PLUGIN_OPAQUE_DATA_VERSION 0
-
+/// This structure denotes a ESIMD EMU plugin-specific data returned via the
+/// piextPluginGetOpaqueData PI call. Depending on the \c version field, the second \c data
+/// field can be interpreted differently.
+struct ESIMDEmuPluginOpaqueData {
+  uintptr_t version;
+  void *data;
+};
 // The table below shows the correspondence between the \c version
 // and the contents of the \c data field for ESIMD CPU Emulator plugin
 // instantiation of the \c PluginOpaqueData structure:
