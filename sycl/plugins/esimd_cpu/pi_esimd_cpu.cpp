@@ -55,7 +55,15 @@
 // deallocate them automatically at the end of the main program.
 // The heap memory allocated for this global variable reclaimed only when
 // Sycl RT calls piTearDown().
-static OpaqueDataAccess *PiESimdDeviceAccess;
+static ESIMDEmuPluginOpaqueData *PiESimdDeviceAccess;
+
+// To be compared with ESIMD_EMU_PLUGIN_OPAQUE_DATA_VERSION in device
+// interface header file
+#define ESIMDEmuPluginDataVersion 0
+
+// To be compared with ESIMD_DEVICE_INTERFACE_VERSION in device
+// interface header file
+#define ESIMDEmuPluginInterfaceVersion 1
 
 using IDBuilder = sycl::detail::Builder;
 
@@ -232,8 +240,8 @@ private:
   KernelType MKernel;
 
   // Space-dimension info
-  std::vector<uint32_t> groupDim;
-  std::vector<uint32_t> spaceDim;
+  std::vector<uint32_t> GroupDim;
+  std::vector<uint32_t> SpaceDim;
 
   // Number of threads for parallelization
   const uint32_t hwThreads = (uint32_t)std::thread::hardware_concurrency();
@@ -246,7 +254,7 @@ private:
 
 public:
   libCMBatch(KernelType Kernel)
-      : MKernel(Kernel), groupDim{1, 1, 1}, spaceDim{1, 1, 1} {
+      : MKernel(Kernel), GroupDim{1, 1, 1}, SpaceDim{1, 1, 1} {
     assert(MKernel != nullptr);
   }
 
@@ -255,14 +263,14 @@ public:
   typename std::enable_if<(DIMS == 1) &&
                           (std::is_same<ArgT, sycl::id<1>>::value)>::type
   runIterationSpace(const sycl::range<1> &Range) {
-    auto wrappedLambda_ID_1DIM =
+    auto WrappedLambda_ID_1DIM =
         makeWrapper_ID_1DIM(MKernel, UnusedRange, UnusedRange, UnusedID);
 
-    spaceDim[0] = (uint32_t)Range[0];
+    SpaceDim[0] = (uint32_t)Range[0];
 
-    PLACEHOLDER_UNUSED(wrappedLambda_ID_1DIM);
+    PLACEHOLDER_UNUSED(WrappedLambda_ID_1DIM);
     // TODO : Invoke invokeLambda_ID_1DIM through CM's multi-threaded
-    // kernel launching with wrappedLambda_ID_1DIM and dimension info
+    // kernel launching with WrappedLambda_ID_1DIM and dimension info
   }
 
   // ID_2DIM
@@ -270,15 +278,15 @@ public:
   typename std::enable_if<(DIMS == 2) &&
                           (std::is_same<ArgT, sycl::id<2>>::value)>::type
   runIterationSpace(const sycl::range<2> &Range) {
-    auto wrappedLambda_ID_2DIM =
+    auto WrappedLambda_ID_2DIM =
         makeWrapper_ID_2DIM(MKernel, UnusedRange, UnusedRange, UnusedID);
 
-    spaceDim[0] = (uint32_t)Range[0];
-    spaceDim[1] = (uint32_t)Range[1];
+    SpaceDim[0] = (uint32_t)Range[0];
+    SpaceDim[1] = (uint32_t)Range[1];
 
-    PLACEHOLDER_UNUSED(wrappedLambda_ID_2DIM);
+    PLACEHOLDER_UNUSED(WrappedLambda_ID_2DIM);
     // TODO : Invoke invokeLambda_ID_2DIM through CM's multi-threaded
-    // kernel launching with wrappedLambda_ID_2DIM and dimension info
+    // kernel launching with WrappedLambda_ID_2DIM and dimension info
   }
 
   // ID_3DIM
@@ -286,16 +294,16 @@ public:
   typename std::enable_if<(DIMS == 3) &&
                           (std::is_same<ArgT, sycl::id<3>>::value)>::type
   runIterationSpace(const sycl::range<3> &Range) {
-    auto wrappedLambda_ID_3DIM =
+    auto WrappedLambda_ID_3DIM =
         makeWrapper_ID_3DIM(MKernel, UnusedRange, UnusedRange, UnusedID);
 
-    spaceDim[0] = (uint32_t)Range[0];
-    spaceDim[1] = (uint32_t)Range[1];
-    spaceDim[2] = (uint32_t)Range[2];
+    SpaceDim[0] = (uint32_t)Range[0];
+    SpaceDim[1] = (uint32_t)Range[1];
+    SpaceDim[2] = (uint32_t)Range[2];
 
-    PLACEHOLDER_UNUSED(wrappedLambda_ID_3DIM);
+    PLACEHOLDER_UNUSED(WrappedLambda_ID_3DIM);
     // TODO : Invoke invokeLambda_ID_3DIM through CM's multi-threaded
-    // kernel launching with wrappedLambda_ID_3DIM and dimension info
+    // kernel launching with WrappedLambda_ID_3DIM and dimension info
   }
 
   // Item w/o offset
@@ -304,14 +312,14 @@ public:
       (DIMS == 1) &&
       (std::is_same<ArgT, sycl::item<1, /*Offset=*/false>>::value)>::type
   runIterationSpace(const sycl::range<1> &Range) {
-    auto wrappedLambda_ITEM_1DIM =
+    auto WrappedLambda_ITEM_1DIM =
         makeWrapper_ITEM_1DIM(MKernel, UnusedRange, UnusedRange, UnusedID);
 
-    spaceDim[0] = (uint32_t)Range[0];
+    SpaceDim[0] = (uint32_t)Range[0];
 
-    PLACEHOLDER_UNUSED(wrappedLambda_ITEM_1DIM);
+    PLACEHOLDER_UNUSED(WrappedLambda_ITEM_1DIM);
     // TODO : Invoke invokeLambda_ITEM_1DIM through CM's multi-threaded
-    // kernel launching with wrappedLambda_ITEM_1DIM and dimension info
+    // kernel launching with WrappedLambda_ITEM_1DIM and dimension info
   }
 
   template <class ArgT = KernelArgType>
@@ -319,15 +327,15 @@ public:
       (DIMS == 2) &&
       (std::is_same<ArgT, sycl::item<2, /*Offset=*/false>>::value)>::type
   runIterationSpace(const sycl::range<2> &Range) {
-    auto wrappedLambda_ITEM_2DIM =
+    auto WrappedLambda_ITEM_2DIM =
         makeWrapper_ITEM_2DIM(MKernel, UnusedRange, UnusedRange, UnusedID);
 
-    spaceDim[0] = (uint32_t)Range[0];
-    spaceDim[1] = (uint32_t)Range[1];
+    SpaceDim[0] = (uint32_t)Range[0];
+    SpaceDim[1] = (uint32_t)Range[1];
 
-    PLACEHOLDER_UNUSED(wrappedLambda_ITEM_2DIM);
+    PLACEHOLDER_UNUSED(WrappedLambda_ITEM_2DIM);
     // TODO : Invoke invokeLambda_ITEM_2DIM through CM's multi-threaded
-    // kernel launching with wrappedLambda_ITEM_2DIM and dimension info
+    // kernel launching with WrappedLambda_ITEM_2DIM and dimension info
   }
 
   template <class ArgT = KernelArgType>
@@ -335,16 +343,16 @@ public:
       (DIMS == 3) &&
       (std::is_same<ArgT, sycl::item<3, /*Offset=*/false>>::value)>::type
   runIterationSpace(const sycl::range<3> &Range) {
-    auto wrappedLambda_ITEM_3DIM =
+    auto WrappedLambda_ITEM_3DIM =
         makeWrapper_ITEM_3DIM(MKernel, UnusedRange, UnusedRange, UnusedID);
 
-    spaceDim[0] = (uint32_t)Range[0];
-    spaceDim[1] = (uint32_t)Range[1];
-    spaceDim[2] = (uint32_t)Range[2];
+    SpaceDim[0] = (uint32_t)Range[0];
+    SpaceDim[1] = (uint32_t)Range[1];
+    SpaceDim[2] = (uint32_t)Range[2];
 
-    PLACEHOLDER_UNUSED(wrappedLambda_ITEM_3DIM);
+    PLACEHOLDER_UNUSED(WrappedLambda_ITEM_3DIM);
     // TODO : Invoke invokeLambda_ITEM_3DIM through CM's multi-threaded
-    // kernel launching with wrappedLambda_ITEM_3DIM and dimension info
+    // kernel launching with WrappedLambda_ITEM_3DIM and dimension info
   }
 
   // Item w/ offset
@@ -353,14 +361,14 @@ public:
       (DIMS == 1) &&
       (std::is_same<ArgT, sycl::item<1, /*Offset=*/true>>::value)>::type
   runIterationSpace(const sycl::range<1> &Range, const sycl::id<1> &Offset) {
-    auto wrappedLambda_ITEM_OFFSET_1DIM =
+    auto WrappedLambda_ITEM_OFFSET_1DIM =
         makeWrapper_ITEM_OFFSET_1DIM(MKernel, UnusedRange, UnusedRange, Offset);
 
-    spaceDim[0] = (uint32_t)Range[0];
+    SpaceDim[0] = (uint32_t)Range[0];
 
-    PLACEHOLDER_UNUSED(wrappedLambda_ITEM_OFFSET_1DIM);
+    PLACEHOLDER_UNUSED(WrappedLambda_ITEM_OFFSET_1DIM);
     // TODO : Invoke invokeLambda_ITEM_OFFSET_1DIM through CM's multi-threaded
-    // kernel launching with wrappedLambda_ITEM_OFFSET_1DIM and dimension info
+    // kernel launching with WrappedLambda_ITEM_OFFSET_1DIM and dimension info
   }
 
   template <class ArgT = KernelArgType>
@@ -368,15 +376,15 @@ public:
       (DIMS == 2) &&
       (std::is_same<ArgT, sycl::item<2, /*Offset=*/true>>::value)>::type
   runIterationSpace(const sycl::range<2> &Range, const sycl::id<2> &Offset) {
-    auto wrappedLambda_ITEM_OFFSET_2DIM =
+    auto WrappedLambda_ITEM_OFFSET_2DIM =
         makeWrapper_ITEM_OFFSET_2DIM(MKernel, UnusedRange, UnusedRange, Offset);
 
-    spaceDim[0] = (uint32_t)Range[0];
-    spaceDim[1] = (uint32_t)Range[1];
+    SpaceDim[0] = (uint32_t)Range[0];
+    SpaceDim[1] = (uint32_t)Range[1];
 
-    PLACEHOLDER_UNUSED(wrappedLambda_ITEM_OFFSET_2DIM);
+    PLACEHOLDER_UNUSED(WrappedLambda_ITEM_OFFSET_2DIM);
     // TODO : Invoke invokeLambda_ITEM_OFFSET_2DIM through CM's multi-threaded
-    // kernel launching with wrappedLambda_ITEM_OFFSET_2DIM and dimension info
+    // kernel launching with WrappedLambda_ITEM_OFFSET_2DIM and dimension info
   }
 
   template <class ArgT = KernelArgType>
@@ -384,16 +392,16 @@ public:
       (DIMS == 3) &&
       (std::is_same<ArgT, sycl::item<3, /*Offset=*/true>>::value)>::type
   runIterationSpace(const sycl::range<3> &Range, const sycl::id<3> &Offset) {
-    auto wrappedLambda_ITEM_OFFSET_3DIM =
+    auto WrappedLambda_ITEM_OFFSET_3DIM =
         makeWrapper_ITEM_OFFSET_3DIM(MKernel, UnusedRange, UnusedRange, Offset);
 
-    spaceDim[0] = (uint32_t)Range[0];
-    spaceDim[1] = (uint32_t)Range[1];
-    spaceDim[2] = (uint32_t)Range[2];
+    SpaceDim[0] = (uint32_t)Range[0];
+    SpaceDim[1] = (uint32_t)Range[1];
+    SpaceDim[2] = (uint32_t)Range[2];
 
-    PLACEHOLDER_UNUSED(wrappedLambda_ITEM_OFFSET_3DIM);
+    PLACEHOLDER_UNUSED(WrappedLambda_ITEM_OFFSET_3DIM);
     // TODO : Invoke invokeLambda_ITEM_OFFSET_3DIM through CM's multi-threaded
-    // kernel launching with wrappedLambda_ITEM_OFFSET_3DIM and dimension info
+    // kernel launching with WrappedLambda_ITEM_OFFSET_3DIM and dimension info
   }
 
   // NDItem_1DIM
@@ -403,16 +411,16 @@ public:
   runIterationSpace(const sycl::range<1> &LocalSize,
                     const sycl::range<1> &GlobalSize,
                     const sycl::id<1> &GlobalOffset) {
-    auto wrappedLambda_NDITEM_1DIM =
+    auto WrappedLambda_NDITEM_1DIM =
         makeWrapper_NDITEM_1DIM(MKernel, LocalSize, GlobalSize, GlobalOffset);
 
-    spaceDim[0] = (uint32_t)LocalSize[0];
+    SpaceDim[0] = (uint32_t)LocalSize[0];
 
-    groupDim[0] = (uint32_t)(GlobalSize[0] / LocalSize[0]);
+    GroupDim[0] = (uint32_t)(GlobalSize[0] / LocalSize[0]);
 
-    PLACEHOLDER_UNUSED(wrappedLambda_NDITEM_1DIM);
+    PLACEHOLDER_UNUSED(WrappedLambda_NDITEM_1DIM);
     // TODO : Invoke invokeLambda_NDITEM_1DIM through CM's multi-threaded
-    // kernel launching with wrappedLambda_NDITEM_1DIM and dimension info
+    // kernel launching with WrappedLambda_NDITEM_1DIM and dimension info
   }
 
   // NDItem_2DIM
@@ -422,18 +430,18 @@ public:
   runIterationSpace(const sycl::range<2> &LocalSize,
                     const sycl::range<2> &GlobalSize,
                     const sycl::id<2> &GlobalOffset) {
-    auto wrappedLambda_NDITEM_2DIM =
+    auto WrappedLambda_NDITEM_2DIM =
         makeWrapper_NDITEM_2DIM(MKernel, LocalSize, GlobalSize, GlobalOffset);
 
-    spaceDim[0] = (uint32_t)LocalSize[0];
-    spaceDim[1] = (uint32_t)LocalSize[1];
+    SpaceDim[0] = (uint32_t)LocalSize[0];
+    SpaceDim[1] = (uint32_t)LocalSize[1];
 
-    groupDim[0] = (uint32_t)(GlobalSize[0] / LocalSize[0]);
-    groupDim[1] = (uint32_t)(GlobalSize[1] / LocalSize[1]);
+    GroupDim[0] = (uint32_t)(GlobalSize[0] / LocalSize[0]);
+    GroupDim[1] = (uint32_t)(GlobalSize[1] / LocalSize[1]);
 
-    PLACEHOLDER_UNUSED(wrappedLambda_NDITEM_2DIM);
+    PLACEHOLDER_UNUSED(WrappedLambda_NDITEM_2DIM);
     // TODO : Invoke invokeLambda_NDITEM_2DIM through CM's multi-threaded
-    // kernel launching with wrappedLambda_NDITEM_2DIM and dimension info
+    // kernel launching with WrappedLambda_NDITEM_2DIM and dimension info
   }
 
   // NDItem_3DIM
@@ -443,26 +451,27 @@ public:
   runIterationSpace(const sycl::range<3> &LocalSize,
                     const sycl::range<3> &GlobalSize,
                     const sycl::id<3> &GlobalOffset) {
-    auto wrappedLambda_NDITEM_3DIM =
+    auto WrappedLambda_NDITEM_3DIM =
         makeWrapper_NDITEM_3DIM(MKernel, LocalSize, GlobalSize, GlobalOffset);
 
-    spaceDim[0] = (uint32_t)LocalSize[0];
-    spaceDim[1] = (uint32_t)LocalSize[1];
-    spaceDim[2] = (uint32_t)LocalSize[2];
+    SpaceDim[0] = (uint32_t)LocalSize[0];
+    SpaceDim[1] = (uint32_t)LocalSize[1];
+    SpaceDim[2] = (uint32_t)LocalSize[2];
 
-    groupDim[0] = (uint32_t)(GlobalSize[0] / LocalSize[0]);
-    groupDim[1] = (uint32_t)(GlobalSize[1] / LocalSize[1]);
-    groupDim[2] = (uint32_t)(GlobalSize[2] / LocalSize[2]);
+    GroupDim[0] = (uint32_t)(GlobalSize[0] / LocalSize[0]);
+    GroupDim[1] = (uint32_t)(GlobalSize[1] / LocalSize[1]);
+    GroupDim[2] = (uint32_t)(GlobalSize[2] / LocalSize[2]);
 
-    PLACEHOLDER_UNUSED(wrappedLambda_NDITEM_3DIM);
+    PLACEHOLDER_UNUSED(WrappedLambda_NDITEM_3DIM);
     // TODO : Invoke invokeLambda_NDITEM_3DIM through CM's multi-threaded
-    // kernel launching with wrappedLambda_NDITEM_3DIM and dimension info
+    // kernel launching with WrappedLambda_NDITEM_3DIM and dimension info
   }
 };
 
 // Intrinsics
 ESIMDDeviceInterface::ESIMDDeviceInterface() {
   reserved = nullptr;
+  version = ESIMDEmuPluginInterfaceVersion;
 
   /// TODO : Fill *_ptr fields with function pointers from CM
   /// functions prefixed with 'cm_support'
@@ -471,7 +480,7 @@ ESIMDDeviceInterface::ESIMDDeviceInterface() {
   cm_sbarrier_ptr = nullptr; /* cm_support::split_barrier; */
   cm_fence_ptr = nullptr;    /* cm_support::fence; */
 
-  sycl_get_surface_base_ptr = nullptr; /* cm_support::get_surface_base_addr; */
+  sycl_get_surface_base_addr_ptr = nullptr; /* cm_support::get_surface_base_addr; */
   __cm_emu_get_slm_ptr = nullptr;      /* cm_support::get_slm_base; */
   cm_slm_init_ptr = nullptr;           /* cm_support::init_slm; */
 }
@@ -1232,7 +1241,7 @@ pi_result piextPluginGetOpaqueData(void *opaque_data_param,
 }
 
 pi_result piTearDown(void *PluginParameter) {
-  delete PiESimdDeviceAccess->interface;
+  delete reinterpret_cast<ESIMDEmuPluginOpaqueData *>(PiESimdDeviceAccess->data);
   delete PiESimdDeviceAccess;
   return PI_SUCCESS;
 }
@@ -1243,11 +1252,11 @@ pi_result piPluginInit(pi_plugin *PluginInit) {
   assert(strlen(_PI_H_VERSION_STRING) < PluginVersionSize);
   strncpy(PluginInit->PluginVersion, _PI_H_VERSION_STRING, PluginVersionSize);
 
-  PiESimdDeviceAccess = new OpaqueDataAccess();
+  PiESimdDeviceAccess = new ESIMDEmuPluginOpaqueData();
   // 'version' to be compared with 'ESIMD_CPU_DEVICE_REQUIRED_VER' defined in
   // device interface file
-  PiESimdDeviceAccess->version = 0;
-  PiESimdDeviceAccess->interface = new ESIMDDeviceInterface();
+  PiESimdDeviceAccess->version = ESIMDEmuPluginDataVersion;
+  PiESimdDeviceAccess->data = reinterpret_cast<void*>(new ESIMDDeviceInterface());
 
 #define _PI_API(api)                                                           \
   (PluginInit->PiFunctionTable).api = (decltype(&::api))(&api);

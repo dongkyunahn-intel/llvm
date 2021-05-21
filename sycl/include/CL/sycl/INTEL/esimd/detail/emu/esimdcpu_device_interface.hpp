@@ -23,7 +23,7 @@
 
 /// This is the device interface version required (and used) by this implementation of
 /// the ESIMD CPU emulator.
-#define ESIMD_DEVICE_INTERFACE_VERSION 0
+#define ESIMD_DEVICE_INTERFACE_VERSION 1
 
 #ifdef _MSC_VER
 // Definitions for type consistency between ESIMD_CPU and CM_EMU
@@ -32,13 +32,25 @@ typedef unsigned short ushort;
 typedef unsigned char uchar;
 #endif // _MSC_VER
 
+// 'ESIMDDeviceInterface' structure defines interface for ESIMD CPU
+// emulation (ESIMD_CPU) to access LibCM CPU emulation functionalities
+// from kernel application under emulation.
+
+// Header files included in the structure contains only function
+// pointers to access CM functionalities. Only new function can be
+// added - reordering, changing, or removing existing function pointer
+// is not allowed.
+
+// Whenever a new function(s) is added to this interface, a new header
+// file must be added following naming convention that contains
+// version number such as 'v1' from 'ESIMD_DEVICE_INTERFACE_VERSION'.
 struct ESIMDDeviceInterface {
+  uintptr_t version;
   void *reserved;
 
   ESIMDDeviceInterface();
-#include "esimd_emu_functions_v0.h"
+#include "esimd_emu_functions_v1.h"
 };
-
 
 // Denotes the data version used by the implementation.
 // Increment whenever the 'data' field interpretation within PluginOpaqueData is changed.
@@ -58,20 +70,22 @@ ESIMDDeviceInterface *getESIMDDeviceInterface() {
   // TODO (performance) cache the interface pointer, can make a difference when
   // calling fine-grained libCM APIs through it (like memory access in a tight
   // loop)
-  ESIMDEmuPluginOpaqueData *OpaqueData = nullptr;
+  void *PIOpaqueData = nullptr;
 
-  const plugin &EsimdPlugin =
+  const cl::sycl::detail::plugin &EsimdPlugin =
       cl::sycl::detail::pi::getPlugin<cl::sycl::backend::esimd_cpu>();
   EsimdPlugin.call<cl::sycl::detail::PiApiKind::piextPluginGetOpaqueData>(
-      nullptr, &OpaqueData);
+      nullptr, &PIOpaqueData);
 
-  // First check if opaque data version is compatible. 
+  ESIMDEmuPluginOpaqueData *OpaqueData = reinterpret_cast<ESIMDEmuPluginOpaqueData *>(PIOpaqueData);
+
+  // First check if opaque data version is compatible.
   if (OpaqueData->version != ESIMD_EMU_PLUGIN_OPAQUE_DATA_VERSION) {
     // NOTE: the version check should always be '!=' as layouts of different
     // versions of PluginOpaqueData is not backward compatible, unlike
     // layout of the ESIMDDeviceInterface.
 
-    std::cerr << __FUNCTION__
+    std::cerr << __FUNCTION__ << std::endl
               << "Opaque data returned by ESIMD Emu plugin is incompatible with"
               << "the one used in current implementation."  << std::endl
               << "Returned version : " << OpaqueData->version << std::endl
@@ -84,15 +98,18 @@ ESIMDDeviceInterface *getESIMDDeviceInterface() {
     reinterpret_cast<ESIMDDeviceInterface*>(OpaqueData->data);
 
   // Now check that device interface version is compatible. 
-  if (Intf->version < ESIMD_DEVICE_INTERFACE_VERSION) {
-    std::cerr << __FUNCTION__
+  if (Interface->version < ESIMD_DEVICE_INTERFACE_VERSION) {
+    std::cerr << __FUNCTION__ << std::endl
               << "The device interface version provided from plug-in "
               << "library is behind required device interface version"
               << std::endl
-              << "Found version : " << Intf->version << std::endl
+              << "Found version : " << Interface->version << std::endl
               << "Required version :" << ESIMD_DEVICE_INTERFACE_VERSION
               << std::endl;
     throw cl::sycl::feature_not_supported();
   }
-  return Intf;
+  return Interface;
 }
+
+#undef ESIMD_DEVICE_INTERFACE_VERSION
+#undef ESIMD_EMU_PLUGIN_OPAQUE_DATA_VERSION
