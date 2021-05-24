@@ -18,19 +18,15 @@
 
 #pragma once
 
-#include <CL/sycl/detail/plugin.hpp>
-#include <cstdint>
+#include <CL/sycl/detail/pi.hpp>
+
+__SYCL_INLINE_NAMESPACE(cl) {
+  namespace sycl {
+  namespace detail {
 
 /// This is the device interface version required (and used) by this implementation of
 /// the ESIMD CPU emulator.
 #define ESIMD_DEVICE_INTERFACE_VERSION 1
-
-#ifdef _MSC_VER
-// Definitions for type consistency between ESIMD_CPU and CM_EMU
-typedef unsigned int uint;
-typedef unsigned short ushort;
-typedef unsigned char uchar;
-#endif // _MSC_VER
 
 // 'ESIMDDeviceInterface' structure defines interface for ESIMD CPU
 // emulation (ESIMD_CPU) to access LibCM CPU emulation functionalities
@@ -72,10 +68,7 @@ ESIMDDeviceInterface *getESIMDDeviceInterface() {
   // loop)
   void *PIOpaqueData = nullptr;
 
-  const cl::sycl::detail::plugin &EsimdPlugin =
-      cl::sycl::detail::pi::getPlugin<cl::sycl::backend::esimd_cpu>();
-  EsimdPlugin.call<cl::sycl::detail::PiApiKind::piextPluginGetOpaqueData>(
-      nullptr, &PIOpaqueData);
+  PIOpaqueData = getPluginOpaqueData<cl::sycl::backend::esimd_cpu>(nullptr);
 
   ESIMDEmuPluginOpaqueData *OpaqueData = reinterpret_cast<ESIMDEmuPluginOpaqueData *>(PIOpaqueData);
 
@@ -113,3 +106,7 @@ ESIMDDeviceInterface *getESIMDDeviceInterface() {
 
 #undef ESIMD_DEVICE_INTERFACE_VERSION
 #undef ESIMD_EMU_PLUGIN_OPAQUE_DATA_VERSION
+
+} // namespace detail
+} // namespace sycl
+} // __SYCL_INLINE_NAMESPACE(cl)

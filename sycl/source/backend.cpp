@@ -9,11 +9,11 @@
 #include "detail/context_impl.hpp"
 #include "detail/event_impl.hpp"
 #include "detail/platform_impl.hpp"
+#include "detail/plugin.hpp"
 #include "detail/queue_impl.hpp"
 #include <CL/sycl/backend.hpp>
 #include <CL/sycl/detail/export.hpp>
 #include <CL/sycl/detail/pi.h>
-#include <CL/sycl/detail/plugin.hpp>
 #include <CL/sycl/exception_list.hpp>
 
 __SYCL_INLINE_NAMESPACE(cl) {

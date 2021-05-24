@@ -13,7 +13,7 @@
 #include "TestGetPlugin.hpp"
 #include <CL/sycl.hpp>
 #include <CL/sycl/detail/pi.hpp>
-#include <CL/sycl/detail/plugin.hpp>
+#include <detail/plugin.hpp>
 #include <pi_cuda.hpp>
 
 // PI CUDA kernels carry an additional argument for the implicit global offset.

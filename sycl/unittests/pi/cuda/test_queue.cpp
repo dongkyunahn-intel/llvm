@@ -14,7 +14,7 @@
 #include <CL/sycl.hpp>
 #include <CL/sycl/detail/cuda_definitions.hpp>
 #include <CL/sycl/detail/pi.hpp>
-#include <CL/sycl/detail/plugin.hpp>
+#include <detail/plugin.hpp>
 #include <pi_cuda.hpp>
 
 using namespace cl::sycl;

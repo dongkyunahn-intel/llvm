@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include <CL/sycl/detail/plugin.hpp>
+#include <detail/plugin.hpp>
 
 namespace pi {
 inline const char *GetBackendString(cl::sycl::backend backend) {

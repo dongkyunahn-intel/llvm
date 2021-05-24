@@ -8,7 +8,7 @@
 
 #include "TestGetPlugin.hpp"
 #include <CL/sycl/detail/pi.hpp>
-#include <CL/sycl/detail/plugin.hpp>
+#include <detail/plugin.hpp>
 #include <gtest/gtest.h>
 
 using namespace cl::sycl;

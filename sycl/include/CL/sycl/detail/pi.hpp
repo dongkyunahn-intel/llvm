@@ -44,6 +44,10 @@ enum class PiApiKind {
 #include <CL/sycl/detail/pi.def>
 };
 class plugin;
+
+template <cl::sycl::backend BE>
+__SYCL_EXPORT void *getPluginOpaqueData(void *opaquedata_arg);
+
 namespace pi {
 
 // The SYCL_PI_TRACE sets what we will trace.
@@ -55,7 +59,7 @@ enum TraceLevel {
 };
 
 // Return true if we want to trace PI related activities.
-__SYCL_EXPORT bool trace(TraceLevel level);
+bool trace(TraceLevel level);
 
 #ifdef __SYCL_RT_OS_WINDOWS
 #define __SYCL_OPENCL_PLUGIN_NAME "pi_opencl.dll"

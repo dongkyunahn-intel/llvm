@@ -55,7 +55,7 @@
 // deallocate them automatically at the end of the main program.
 // The heap memory allocated for this global variable reclaimed only when
 // Sycl RT calls piTearDown().
-static ESIMDEmuPluginOpaqueData *PiESimdDeviceAccess;
+static sycl::detail::ESIMDEmuPluginOpaqueData *PiESimdDeviceAccess;
 
 // To be compared with ESIMD_EMU_PLUGIN_OPAQUE_DATA_VERSION in device
 // interface header file
@@ -469,7 +469,7 @@ public:
 };
 
 // Intrinsics
-ESIMDDeviceInterface::ESIMDDeviceInterface() {
+sycl::detail::ESIMDDeviceInterface::ESIMDDeviceInterface() {
   reserved = nullptr;
   version = ESIMDEmuPluginInterfaceVersion;
 
@@ -1241,7 +1241,8 @@ pi_result piextPluginGetOpaqueData(void *opaque_data_param,
 }
 
 pi_result piTearDown(void *PluginParameter) {
-  delete reinterpret_cast<ESIMDEmuPluginOpaqueData *>(PiESimdDeviceAccess->data);
+  delete reinterpret_cast<sycl::detail::ESIMDEmuPluginOpaqueData *>(
+      PiESimdDeviceAccess->data);
   delete PiESimdDeviceAccess;
   return PI_SUCCESS;
 }
@@ -1252,11 +1253,12 @@ pi_result piPluginInit(pi_plugin *PluginInit) {
   assert(strlen(_PI_H_VERSION_STRING) < PluginVersionSize);
   strncpy(PluginInit->PluginVersion, _PI_H_VERSION_STRING, PluginVersionSize);
 
-  PiESimdDeviceAccess = new ESIMDEmuPluginOpaqueData();
+  PiESimdDeviceAccess = new sycl::detail::ESIMDEmuPluginOpaqueData();
   // 'version' to be compared with 'ESIMD_CPU_DEVICE_REQUIRED_VER' defined in
   // device interface file
   PiESimdDeviceAccess->version = ESIMDEmuPluginDataVersion;
-  PiESimdDeviceAccess->data = reinterpret_cast<void*>(new ESIMDDeviceInterface());
+  PiESimdDeviceAccess->data =
+      reinterpret_cast<void *>(new sycl::detail::ESIMDDeviceInterface());
 
 #define _PI_API(api)                                                           \
   (PluginInit->PiFunctionTable).api = (decltype(&::api))(&api);

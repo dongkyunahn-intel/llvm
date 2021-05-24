@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// \file pi.cpp
-/// Implementation of C++ wrappers for PI interface.
+/// \file pi.cpp/
+// Implementation of C++ wrappers for PI interface.
 ///
 /// \ingroup sycl_pi
 
@@ -16,10 +16,10 @@
 #include <CL/sycl/detail/common.hpp>
 #include <CL/sycl/detail/device_filter.hpp>
 #include <CL/sycl/detail/pi.hpp>
-#include <CL/sycl/detail/plugin.hpp>
 #include <CL/sycl/detail/stl_type_traits.hpp>
 #include <detail/config.hpp>
 #include <detail/global_handler.hpp>
+#include <detail/plugin.hpp>
 
 #include <bitset>
 #include <cstdarg>
@@ -52,6 +52,20 @@ constexpr uint32_t GMajVer = 1;
 constexpr uint32_t GMinVer = 0;
 constexpr const char *GVerStr = "sycl 1.0";
 #endif // XPTI_ENABLE_INSTRUMENTATION
+
+template <cl::sycl::backend BE>
+void *getPluginOpaqueData(void *opaquedata_arg) {
+  void *ReturnOpaqueData;
+  const cl::sycl::detail::plugin &Plugin =
+      cl::sycl::detail::pi::getPlugin<BE>();
+
+  Plugin.call<cl::sycl::detail::PiApiKind::piextPluginGetOpaqueData>(
+      opaquedata_arg, &ReturnOpaqueData);
+
+  return ReturnOpaqueData;
+}
+
+template void *getPluginOpaqueData<cl::sycl::backend::esimd_cpu>(void *);
 
 namespace pi {
 

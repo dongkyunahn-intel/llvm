@@ -11,6 +11,7 @@
 /// \ingroup sycl_pi_esimd_cpu
 
 #pragma once
+#include <cstdint>
 
 // This file defines function interfaces for ESIMD CPU Emulation
 // (ESIMD_CPU) to access LibCM CPU emulation functionalities from
@@ -33,7 +34,7 @@
 
 // Intrinsics
 void (*cm_barrier_ptr)(void);
-void (*cm_sbarrier_ptr)(uint);
+void (*cm_sbarrier_ptr)(uint32_t);
 void (*cm_fence_ptr)(void);
 
 // libcm functionalities used for intrinsics such as

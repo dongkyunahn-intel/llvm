@@ -5,8 +5,8 @@
 #pragma once
 
 #include "BackendString.hpp"
-#include <CL/sycl/detail/plugin.hpp>
 #include <algorithm>
+#include <detail/plugin.hpp>
 #include <functional>
 
 namespace pi {
