@@ -54,7 +54,7 @@ constexpr const char *GVerStr = "sycl 1.0";
 #endif // XPTI_ENABLE_INSTRUMENTATION
 
 template <cl::sycl::backend BE>
-void *getPluginOpaqueData(void *opaquedata_arg) {
+void *getPluginOpaqueData(void *OpaqueDataParam) {
   void *ReturnOpaqueData;
   const cl::sycl::detail::plugin &Plugin =
       cl::sycl::detail::pi::getPlugin<BE>();
