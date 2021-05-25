@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// \file pi.cpp/
-// Implementation of C++ wrappers for PI interface.
+/// \file pi.cpp
+/// Implementation of C++ wrappers for PI interface.
 ///
 /// \ingroup sycl_pi
 
@@ -60,7 +60,7 @@ void *getPluginOpaqueData(void *OpaqueDataParam) {
       cl::sycl::detail::pi::getPlugin<BE>();
 
   Plugin.call<cl::sycl::detail::PiApiKind::piextPluginGetOpaqueData>(
-      opaquedata_arg, &ReturnOpaqueData);
+      OpaqueDataParam, &ReturnOpaqueData);
 
   return ReturnOpaqueData;
 }

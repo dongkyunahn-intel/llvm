@@ -20,6 +20,11 @@
 
 #include <CL/sycl/detail/pi.hpp>
 
+// cstdint-type fields such as 'uint32_t' are to be used in funtion
+// pointer table file ('esimd_emu_functions_v1.h') included in 'struct
+// ESIMDDeviceInterface' definition.
+#include <cstdint>
+
 __SYCL_INLINE_NAMESPACE(cl) {
   namespace sycl {
   namespace detail {

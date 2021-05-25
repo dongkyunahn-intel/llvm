@@ -11,7 +11,9 @@
 /// \ingroup sycl_pi_esimd_cpu
 
 #pragma once
-#include <cstdint>
+
+// <cstdint> for 'uint32_t' type is included in upper-level device
+// interface file ('esimdcpu_device_interface.hpp')
 
 // This file defines function interfaces for ESIMD CPU Emulation
 // (ESIMD_CPU) to access LibCM CPU emulation functionalities from

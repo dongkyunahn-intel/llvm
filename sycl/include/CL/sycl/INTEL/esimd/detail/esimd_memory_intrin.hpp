@@ -777,19 +777,22 @@ __esimd_dp4(sycl::INTEL::gpu::vector_type_t<Ty, N> v1,
 }
 
 inline void __esimd_slm_init(size_t size) {
-  ESIMDDeviceInterface *I = getESIMDDeviceInterface();
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
 
   I->cm_slm_init_ptr(size);
 }
 
 inline void __esimd_barrier() {
-  ESIMDDeviceInterface *I = getESIMDDeviceInterface();
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
 
   I->cm_barrier_ptr();
 }
 
 inline void __esimd_sbarrier(sycl::INTEL::gpu::EsimdSbarrierType flag) {
-  ESIMDDeviceInterface *I = getESIMDDeviceInterface();
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
 
   I->cm_sbarrier_ptr((uint)flag);
 }
@@ -801,7 +804,8 @@ inline sycl::INTEL::gpu::vector_type_t<Ty, N>
 __esimd_slm_read(sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
                  sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
   sycl::INTEL::gpu::vector_type_t<Ty, N> retv;
-  ESIMDDeviceInterface *I = getESIMDDeviceInterface();
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
 
   char *SlmBase = I->__cm_emu_get_slm_ptr();
 
@@ -816,7 +820,8 @@ inline void
 __esimd_slm_write(sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
                   sycl::INTEL::gpu::vector_type_t<Ty, N> vals,
                   sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
-  ESIMDDeviceInterface *I = getESIMDDeviceInterface();
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
 
   char *SlmBase = I->__cm_emu_get_slm_ptr();
 
@@ -828,7 +833,8 @@ template <typename Ty, int N>
 inline sycl::INTEL::gpu::vector_type_t<Ty, N>
 __esimd_slm_block_read(uint32_t addr) {
   sycl::INTEL::gpu::vector_type_t<Ty, N> retv;
-  ESIMDDeviceInterface *I = getESIMDDeviceInterface();
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
 
   char *SlmBase = I->__cm_emu_get_slm_ptr();
 
@@ -842,7 +848,8 @@ template <typename Ty, int N>
 inline void
 __esimd_slm_block_write(uint32_t addr,
                         sycl::INTEL::gpu::vector_type_t<Ty, N> vals) {
-  ESIMDDeviceInterface *I = getESIMDDeviceInterface();
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
 
   char *SlmBase = I->__cm_emu_get_slm_ptr();
 
@@ -855,7 +862,8 @@ inline sycl::INTEL::gpu::vector_type_t<Ty, N * NumChannels(Mask)>
 __esimd_slm_read4(sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
                   sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
   sycl::INTEL::gpu::vector_type_t<Ty, N * NumChannels(Mask)> retv;
-  ESIMDDeviceInterface *I = getESIMDDeviceInterface();
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
 
   char *ReadBase = I->__cm_emu_get_slm_ptr();
 
@@ -869,7 +877,8 @@ inline void __esimd_slm_write4(
     sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
     sycl::INTEL::gpu::vector_type_t<Ty, N * NumChannels(Mask)> vals,
     sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
-  ESIMDDeviceInterface *I = getESIMDDeviceInterface();
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
 
   char *WriteBase = I->__cm_emu_get_slm_ptr();
 
