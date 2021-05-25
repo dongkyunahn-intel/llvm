@@ -55,7 +55,7 @@ constexpr const char *GVerStr = "sycl 1.0";
 
 template <cl::sycl::backend BE>
 void *getPluginOpaqueData(void *OpaqueDataParam) {
-  void *ReturnOpaqueData;
+  void *ReturnOpaqueData = nullptr;
   const cl::sycl::detail::plugin &Plugin =
       cl::sycl::detail::pi::getPlugin<BE>();
 
