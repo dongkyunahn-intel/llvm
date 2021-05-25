@@ -464,10 +464,6 @@ __esimd_raw_send_store(uint8_t modifier, uint8_t execSize,
                        sycl::INTEL::gpu::vector_type_t<Ty1, N1> msgSrc0);
 #ifndef __SYCL_DEVICE_ONLY__
 
-// TODO : Include CM header files for accessing LibCM intrinsics and
-// low-level supports
-#include <CL/sycl/INTEL/esimd/detail/emu/esimdcpu_device_interface.hpp>
-
 template <typename Ty, int N, int NumBlk, sycl::INTEL::gpu::CacheHint L1H,
           sycl::INTEL::gpu::CacheHint L3H>
 inline sycl::INTEL::gpu::vector_type_t<
@@ -776,26 +772,10 @@ __esimd_dp4(sycl::INTEL::gpu::vector_type_t<Ty, N> v1,
   return retv;
 }
 
-inline void __esimd_slm_init(size_t size) {
-  sycl::detail::ESIMDDeviceInterface *I =
-      sycl::detail::getESIMDDeviceInterface();
+/// TODO
+inline void __esimd_barrier() {}
 
-  I->cm_slm_init_ptr(size);
-}
-
-inline void __esimd_barrier() {
-  sycl::detail::ESIMDDeviceInterface *I =
-      sycl::detail::getESIMDDeviceInterface();
-
-  I->cm_barrier_ptr();
-}
-
-inline void __esimd_sbarrier(sycl::INTEL::gpu::EsimdSbarrierType flag) {
-  sycl::detail::ESIMDDeviceInterface *I =
-      sycl::detail::getESIMDDeviceInterface();
-
-  I->cm_sbarrier_ptr((uint)flag);
-}
+inline void __esimd_sbarrier(sycl::INTEL::gpu::EsimdSbarrierType flag) {}
 
 inline void __esimd_slm_fence(uint8_t cntl) {}
 
@@ -804,13 +784,6 @@ inline sycl::INTEL::gpu::vector_type_t<Ty, N>
 __esimd_slm_read(sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
                  sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
   sycl::INTEL::gpu::vector_type_t<Ty, N> retv;
-  sycl::detail::ESIMDDeviceInterface *I =
-      sycl::detail::getESIMDDeviceInterface();
-
-  char *SlmBase = I->__cm_emu_get_slm_ptr();
-
-  // TODO : Fill 'retv' with values fetched with 'SlmBase'
-
   return retv;
 }
 
@@ -819,27 +792,13 @@ template <typename Ty, int N>
 inline void
 __esimd_slm_write(sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
                   sycl::INTEL::gpu::vector_type_t<Ty, N> vals,
-                  sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
-  sycl::detail::ESIMDDeviceInterface *I =
-      sycl::detail::getESIMDDeviceInterface();
-
-  char *SlmBase = I->__cm_emu_get_slm_ptr();
-
-  // TODO : Store SLM using 'SlmBase' as base address for store
-}
+                  sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {}
 
 // slm_block_read reads a block of data from SLM
 template <typename Ty, int N>
 inline sycl::INTEL::gpu::vector_type_t<Ty, N>
 __esimd_slm_block_read(uint32_t addr) {
   sycl::INTEL::gpu::vector_type_t<Ty, N> retv;
-  sycl::detail::ESIMDDeviceInterface *I =
-      sycl::detail::getESIMDDeviceInterface();
-
-  char *SlmBase = I->__cm_emu_get_slm_ptr();
-
-  // TODO : Fill 'retv' with values fetched with 'SlmBase'
-
   return retv;
 }
 
@@ -847,14 +806,7 @@ __esimd_slm_block_read(uint32_t addr) {
 template <typename Ty, int N>
 inline void
 __esimd_slm_block_write(uint32_t addr,
-                        sycl::INTEL::gpu::vector_type_t<Ty, N> vals) {
-  sycl::detail::ESIMDDeviceInterface *I =
-      sycl::detail::getESIMDDeviceInterface();
-
-  char *SlmBase = I->__cm_emu_get_slm_ptr();
-
-  // TODO : Store SLM using 'SlmBase' as base address for store
-}
+                        sycl::INTEL::gpu::vector_type_t<Ty, N> vals) {}
 
 // slm_read4 does SLM gather4
 template <typename Ty, int N, sycl::INTEL::gpu::ChannelMaskType Mask>
@@ -862,12 +814,6 @@ inline sycl::INTEL::gpu::vector_type_t<Ty, N * NumChannels(Mask)>
 __esimd_slm_read4(sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
                   sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
   sycl::INTEL::gpu::vector_type_t<Ty, N * NumChannels(Mask)> retv;
-  sycl::detail::ESIMDDeviceInterface *I =
-      sycl::detail::getESIMDDeviceInterface();
-
-  char *ReadBase = I->__cm_emu_get_slm_ptr();
-
-  // TODO : Fill 'retv' with values fetched with 'ReadBase'
   return retv;
 }
 
@@ -876,14 +822,7 @@ template <typename Ty, int N, sycl::INTEL::gpu::ChannelMaskType Mask>
 inline void __esimd_slm_write4(
     sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
     sycl::INTEL::gpu::vector_type_t<Ty, N * NumChannels(Mask)> vals,
-    sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
-  sycl::detail::ESIMDDeviceInterface *I =
-      sycl::detail::getESIMDDeviceInterface();
-
-  char *WriteBase = I->__cm_emu_get_slm_ptr();
-
-  // TODO : Store SLM using 'SlmBase' as base address for store
-}
+    sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {}
 
 // slm_atomic: SLM atomic
 template <sycl::INTEL::gpu::EsimdAtomicOpType Op, typename Ty, int N>
