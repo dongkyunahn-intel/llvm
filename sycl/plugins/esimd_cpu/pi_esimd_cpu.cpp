@@ -480,9 +480,10 @@ sycl::detail::ESIMDDeviceInterface::ESIMDDeviceInterface() {
   cm_sbarrier_ptr = nullptr; /* cm_support::split_barrier; */
   cm_fence_ptr = nullptr;    /* cm_support::fence; */
 
-  sycl_get_surface_base_addr_ptr = nullptr; /* cm_support::get_surface_base_addr; */
-  __cm_emu_get_slm_ptr = nullptr;      /* cm_support::get_slm_base; */
-  cm_slm_init_ptr = nullptr;           /* cm_support::init_slm; */
+  sycl_get_surface_base_addr_ptr =
+      nullptr;                    /* cm_support::get_surface_base_addr; */
+  __cm_emu_get_slm_ptr = nullptr; /* cm_support::get_slm_base; */
+  cm_slm_init_ptr = nullptr;      /* cm_support::init_slm; */
 }
 
 extern "C" {
