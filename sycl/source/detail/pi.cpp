@@ -65,7 +65,7 @@ void *getPluginOpaqueData(void *OpaqueDataParam) {
   return ReturnOpaqueData;
 }
 
-template void *getPluginOpaqueData<cl::sycl::backend::esimd_cpu>(void *);
+template __SYCL_EXPORT void *getPluginOpaqueData<cl::sycl::backend::esimd_cpu>(void *);
 
 namespace pi {
 
@@ -438,9 +438,9 @@ template <backend BE> const plugin &getPlugin() {
                       PI_INVALID_OPERATION);
 }
 
-template const plugin &getPlugin<backend::opencl>();
-template const plugin &getPlugin<backend::level_zero>();
-template const plugin &getPlugin<backend::esimd_cpu>();
+template __SYCL_EXPORT const plugin &getPlugin<backend::opencl>();
+template __SYCL_EXPORT const plugin &getPlugin<backend::level_zero>();
+template __SYCL_EXPORT const plugin &getPlugin<backend::esimd_cpu>();
 
 // Report error and no return (keeps compiler from printing warnings).
 // TODO: Probably change that to throw a catchable exception,
