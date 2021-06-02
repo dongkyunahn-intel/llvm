@@ -325,8 +325,18 @@ private:
     return Storage;
   }
 
+  void setType(detail::CG::CGTYPE Type) {
+    constexpr detail::CG::CG_VERSION Version = detail::CG::CG_VERSION::V1;
+    MCGType = static_cast<detail::CG::CGTYPE>(
+        getVersionedCGType(Type, static_cast<int>(Version)));
+  }
+
+  detail::CG::CGTYPE getType() {
+    return static_cast<detail::CG::CGTYPE>(getUnversionedCGType(MCGType));
+  }
+
   void throwIfActionIsCreated() {
-    if (detail::CG::NONE != MCGType)
+    if (detail::CG::NONE != getType())
       throw sycl::runtime_error("Attempt to set multiple actions for the "
                                 "command group. Command group must consist of "
                                 "a single kernel or explicit memory operation.",
@@ -738,7 +748,7 @@ private:
     // Range rounding can be disabled by the user.
     // Range rounding is not done on the host device.
     // Range rounding is supported only for newer SYCL standards.
-#if !defined(SYCL_DISABLE_PARALLEL_FOR_RANGE_ROUNDING) &&                      \
+#if !defined(__SYCL_DISABLE_PARALLEL_FOR_RANGE_ROUNDING__) &&                  \
     !defined(DPCPP_HOST_DEVICE_OPENMP) &&                                      \
     !defined(DPCPP_HOST_DEVICE_PERF_NATIVE) && SYCL_LANGUAGE_VERSION >= 202001
     // Range should be a multiple of this for reasonable performance.
@@ -822,10 +832,10 @@ private:
       MNDRDesc.set(std::move(AdjustedRange));
       StoreLambda<NameWT, decltype(Wrapper), Dims, TransformedArgType>(
           std::move(Wrapper));
-      MCGType = detail::CG::KERNEL_V1;
+      setType(detail::CG::KERNEL);
 #endif
     } else
-#endif // !SYCL_DISABLE_PARALLEL_FOR_RANGE_ROUNDING &&                         \
+#endif // !__SYCL_DISABLE_PARALLEL_FOR_RANGE_ROUNDING__ &&                     \
        // !DPCPP_HOST_DEVICE_OPENMP && !DPCPP_HOST_DEVICE_PERF_NATIVE &&       \
        // SYCL_LANGUAGE_VERSION >= 202001
     {
@@ -837,7 +847,7 @@ private:
       MNDRDesc.set(std::move(NumWorkItems));
       StoreLambda<NameT, KernelType, Dims, TransformedArgType>(
           std::move(KernelFunc));
-      MCGType = detail::CG::KERNEL_V1;
+      setType(detail::CG::KERNEL);
 #endif
     }
   }
@@ -856,7 +866,7 @@ private:
     MKernel = detail::getSyclObjImpl(std::move(Kernel));
     detail::checkValueRange<Dims>(NumWorkItems);
     MNDRDesc.set(std::move(NumWorkItems));
-    MCGType = detail::CG::KERNEL_V1;
+    setType(detail::CG::KERNEL);
     extractArgsAndReqs();
     MKernelName = getKernelName();
   }
@@ -1028,6 +1038,23 @@ private:
   void setHandlerKernelBundle(
       const std::shared_ptr<detail::kernel_bundle_impl> &NewKernelBundleImpPtr);
 
+  template <typename FuncT>
+  detail::enable_if_t<
+      detail::check_fn_signature<detail::remove_reference_t<FuncT>,
+                                 void()>::value ||
+      detail::check_fn_signature<detail::remove_reference_t<FuncT>,
+                                 void(interop_handle)>::value>
+  host_task_impl(FuncT &&Func) {
+    throwIfActionIsCreated();
+
+    MNDRDesc.set(range<1>(1));
+    MArgs = std::move(MAssociatedAccesors);
+
+    MHostTask.reset(new detail::HostTask(std::move(Func)));
+
+    setType(detail::CG::CODEPLAY_HOST_TASK);
+  }
+
 public:
   handler(const handler &) = delete;
   handler(handler &&) = delete;
@@ -1048,7 +1075,7 @@ public:
   }
 
   template <auto &SpecName>
-  typename std::remove_reference_t<decltype(SpecName)>::type
+  typename std::remove_reference_t<decltype(SpecName)>::value_type
   get_specialization_constant() const {
 
     std::shared_ptr<detail::kernel_bundle_impl> KernelBundleImplPtr =
@@ -1173,7 +1200,7 @@ public:
     MNDRDesc.set(range<1>{1});
 
     StoreLambda<NameT, KernelType, /*Dims*/ 0, void>(KernelFunc);
-    MCGType = detail::CG::KERNEL_V1;
+    setType(detail::CG::KERNEL);
 #endif
   }
 
@@ -1217,35 +1244,30 @@ public:
     MArgs = std::move(MAssociatedAccesors);
     MHostKernel.reset(
         new detail::HostKernel<FuncT, void, 1, void>(std::move(Func)));
-    MCGType = detail::CG::RUN_ON_HOST_INTEL;
+    setType(detail::CG::RUN_ON_HOST_INTEL);
   }
 
   template <typename FuncT>
-  detail::enable_if_t<detail::check_fn_signature<
-      detail::remove_reference_t<FuncT>, void()>::value>
-  codeplay_host_task(FuncT Func) {
-    throwIfActionIsCreated();
-
-    MNDRDesc.set(range<1>(1));
-    MArgs = std::move(MAssociatedAccesors);
-
-    MHostTask.reset(new detail::HostTask(std::move(Func)));
-
-    MCGType = detail::CG::CODEPLAY_HOST_TASK;
+  __SYCL2020_DEPRECATED(
+      "codeplay_host_task() is deprecated, use host_task() instead")
+  detail::enable_if_t<
+      detail::check_fn_signature<detail::remove_reference_t<FuncT>,
+                                 void()>::value ||
+      detail::check_fn_signature<
+          detail::remove_reference_t<FuncT>,
+          void(interop_handle)>::value> codeplay_host_task(FuncT Func) {
+    host_task_impl(Func);
   }
 
+  /// Enqueues a command to the SYCL runtime to invoke \p Func once.
   template <typename FuncT>
-  detail::enable_if_t<detail::check_fn_signature<
-      detail::remove_reference_t<FuncT>, void(interop_handle)>::value>
-  codeplay_host_task(FuncT Func) {
-    throwIfActionIsCreated();
-
-    MNDRDesc.set(range<1>(1));
-    MArgs = std::move(MAssociatedAccesors);
-
-    MHostTask.reset(new detail::HostTask(std::move(Func)));
-
-    MCGType = detail::CG::CODEPLAY_HOST_TASK;
+  detail::enable_if_t<
+      detail::check_fn_signature<detail::remove_reference_t<FuncT>,
+                                 void()>::value ||
+      detail::check_fn_signature<detail::remove_reference_t<FuncT>,
+                                 void(interop_handle)>::value>
+  host_task(FuncT &&Func) {
+    host_task_impl(Func);
   }
 
 // replace _KERNELFUNCPARAM(KernelFunc) with   KernelType KernelFunc
@@ -1285,7 +1307,7 @@ public:
     detail::checkValueRange<Dims>(NumWorkItems, WorkItemOffset);
     MNDRDesc.set(std::move(NumWorkItems), std::move(WorkItemOffset));
     StoreLambda<NameT, KernelType, Dims, LambdaArgType>(std::move(KernelFunc));
-    MCGType = detail::CG::KERNEL_V1;
+    setType(detail::CG::KERNEL);
 #endif
   }
 
@@ -1317,7 +1339,7 @@ public:
     detail::checkValueRange<Dims>(ExecutionRange);
     MNDRDesc.set(std::move(ExecutionRange));
     StoreLambda<NameT, KernelType, Dims, LambdaArgType>(std::move(KernelFunc));
-    MCGType = detail::CG::KERNEL_V1;
+    setType(detail::CG::KERNEL);
 #endif
   }
 
@@ -1550,7 +1572,7 @@ public:
     detail::checkValueRange<Dims>(NumWorkGroups);
     MNDRDesc.setNumWorkGroups(NumWorkGroups);
     StoreLambda<NameT, KernelType, Dims, LambdaArgType>(std::move(KernelFunc));
-    MCGType = detail::CG::KERNEL_V1;
+    setType(detail::CG::KERNEL);
 #endif // __SYCL_DEVICE_ONLY__
   }
 
@@ -1586,7 +1608,7 @@ public:
     detail::checkValueRange<Dims>(ExecRange);
     MNDRDesc.set(std::move(ExecRange));
     StoreLambda<NameT, KernelType, Dims, LambdaArgType>(std::move(KernelFunc));
-    MCGType = detail::CG::KERNEL_V1;
+    setType(detail::CG::KERNEL);
 #endif // __SYCL_DEVICE_ONLY__
   }
 
@@ -1603,7 +1625,7 @@ public:
     // known constant
     MNDRDesc.set(range<1>{1});
     MKernel = detail::getSyclObjImpl(std::move(Kernel));
-    MCGType = detail::CG::KERNEL_V1;
+    setType(detail::CG::KERNEL);
     extractArgsAndReqs();
     MKernelName = getKernelName();
   }
@@ -1636,7 +1658,7 @@ public:
     MKernel = detail::getSyclObjImpl(std::move(Kernel));
     detail::checkValueRange<Dims>(NumWorkItems, WorkItemOffset);
     MNDRDesc.set(std::move(NumWorkItems), std::move(WorkItemOffset));
-    MCGType = detail::CG::KERNEL_V1;
+    setType(detail::CG::KERNEL);
     extractArgsAndReqs();
     MKernelName = getKernelName();
   }
@@ -1655,7 +1677,7 @@ public:
     MKernel = detail::getSyclObjImpl(std::move(Kernel));
     detail::checkValueRange<Dims>(NDRange);
     MNDRDesc.set(std::move(NDRange));
-    MCGType = detail::CG::KERNEL_V1;
+    setType(detail::CG::KERNEL);
     extractArgsAndReqs();
     MKernelName = getKernelName();
   }
@@ -1679,7 +1701,7 @@ public:
     // known constant
     MNDRDesc.set(range<1>{1});
     MKernel = detail::getSyclObjImpl(std::move(Kernel));
-    MCGType = detail::CG::KERNEL_V1;
+    setType(detail::CG::KERNEL);
     if (!MIsHost && !lambdaAndKernelHaveEqualName<NameT>()) {
       extractArgsAndReqs();
       MKernelName = getKernelName();
@@ -1694,7 +1716,7 @@ public:
   template <typename FuncT> void interop_task(FuncT Func) {
 
     MInteropTask.reset(new detail::InteropTask(std::move(Func)));
-    MCGType = detail::CG::CODEPLAY_INTEROP_TASK;
+    setType(detail::CG::CODEPLAY_INTEROP_TASK);
   }
 
   /// Defines and invokes a SYCL kernel function for the specified range.
@@ -1720,7 +1742,7 @@ public:
     detail::checkValueRange<Dims>(NumWorkItems);
     MNDRDesc.set(std::move(NumWorkItems));
     MKernel = detail::getSyclObjImpl(std::move(Kernel));
-    MCGType = detail::CG::KERNEL_V1;
+    setType(detail::CG::KERNEL);
     if (!MIsHost && !lambdaAndKernelHaveEqualName<NameT>()) {
       extractArgsAndReqs();
       MKernelName = getKernelName();
@@ -1756,7 +1778,7 @@ public:
     detail::checkValueRange<Dims>(NumWorkItems, WorkItemOffset);
     MNDRDesc.set(std::move(NumWorkItems), std::move(WorkItemOffset));
     MKernel = detail::getSyclObjImpl(std::move(Kernel));
-    MCGType = detail::CG::KERNEL_V1;
+    setType(detail::CG::KERNEL);
     if (!MIsHost && !lambdaAndKernelHaveEqualName<NameT>()) {
       extractArgsAndReqs();
       MKernelName = getKernelName();
@@ -1792,7 +1814,7 @@ public:
     detail::checkValueRange<Dims>(NDRange);
     MNDRDesc.set(std::move(NDRange));
     MKernel = detail::getSyclObjImpl(std::move(Kernel));
-    MCGType = detail::CG::KERNEL_V1;
+    setType(detail::CG::KERNEL);
     if (!MIsHost && !lambdaAndKernelHaveEqualName<NameT>()) {
       extractArgsAndReqs();
       MKernelName = getKernelName();
@@ -1833,7 +1855,7 @@ public:
     MNDRDesc.setNumWorkGroups(NumWorkGroups);
     MKernel = detail::getSyclObjImpl(std::move(Kernel));
     StoreLambda<NameT, KernelType, Dims, LambdaArgType>(std::move(KernelFunc));
-    MCGType = detail::CG::KERNEL_V1;
+    setType(detail::CG::KERNEL);
 #endif // __SYCL_DEVICE_ONLY__
   }
 
@@ -1874,7 +1896,7 @@ public:
     MNDRDesc.set(std::move(ExecRange));
     MKernel = detail::getSyclObjImpl(std::move(Kernel));
     StoreLambda<NameT, KernelType, Dims, LambdaArgType>(std::move(KernelFunc));
-    MCGType = detail::CG::KERNEL_V1;
+    setType(detail::CG::KERNEL);
 #endif // __SYCL_DEVICE_ONLY__
   }
 
@@ -1957,7 +1979,7 @@ public:
       return;
     }
 #endif
-    MCGType = detail::CG::COPY_ACC_TO_PTR;
+    setType(detail::CG::COPY_ACC_TO_PTR);
 
     detail::AccessorBaseHost *AccBase = (detail::AccessorBaseHost *)&Src;
     detail::AccessorImplPtr AccImpl = detail::getSyclObjImpl(*AccBase);
@@ -1996,7 +2018,7 @@ public:
       return;
     }
 #endif
-    MCGType = detail::CG::COPY_PTR_TO_ACC;
+    setType(detail::CG::COPY_PTR_TO_ACC);
 
     detail::AccessorBaseHost *AccBase = (detail::AccessorBaseHost *)&Dst;
     detail::AccessorImplPtr AccImpl = detail::getSyclObjImpl(*AccBase);
@@ -2041,7 +2063,7 @@ public:
            "The destination accessor does not fit the copied memory.");
     if (copyAccToAccHelper(Src, Dst))
       return;
-    MCGType = detail::CG::COPY_ACC_TO_ACC;
+    setType(detail::CG::COPY_ACC_TO_ACC);
 
     detail::AccessorBaseHost *AccBaseSrc = (detail::AccessorBaseHost *)&Src;
     detail::AccessorImplPtr AccImplSrc = detail::getSyclObjImpl(*AccBaseSrc);
@@ -2071,7 +2093,7 @@ public:
     throwIfActionIsCreated();
     static_assert(isValidTargetForExplicitOp(AccessTarget),
                   "Invalid accessor target for the update_host method.");
-    MCGType = detail::CG::UPDATE_HOST;
+    setType(detail::CG::UPDATE_HOST);
 
     detail::AccessorBaseHost *AccBase = (detail::AccessorBaseHost *)&Acc;
     detail::AccessorImplPtr AccImpl = detail::getSyclObjImpl(*AccBase);
@@ -2103,7 +2125,7 @@ public:
                   "Invalid accessor target for the fill method.");
     if (!MIsHost && (((Dims == 1) && isConstOrGlobal(AccessTarget)) ||
                      isImageOrImageArray(AccessTarget))) {
-      MCGType = detail::CG::FILL;
+      setType(detail::CG::FILL);
 
       detail::AccessorBaseHost *AccBase = (detail::AccessorBaseHost *)&Dst;
       detail::AccessorImplPtr AccImpl = detail::getSyclObjImpl(*AccBase);
@@ -2148,7 +2170,7 @@ public:
   /// complete state.
   void barrier() {
     throwIfActionIsCreated();
-    MCGType = detail::CG::BARRIER;
+    setType(detail::CG::BARRIER);
   }
 
   /// Prevents any commands submitted afterward to this queue from executing
@@ -2212,7 +2234,9 @@ private:
   string_class MKernelName;
   /// Storage for a sycl::kernel object.
   shared_ptr_class<detail::kernel_impl> MKernel;
-  /// Type of the command group, e.g. kernel, fill.
+  /// Type of the command group, e.g. kernel, fill. Can also encode version.
+  /// Use getType and setType methods to access this variable unless
+  /// manipulations with version are required
   detail::CG::CGTYPE MCGType = detail::CG::NONE;
   /// Pointer to the source host memory or accessor(depending on command type).
   void *MSrcPtr = nullptr;

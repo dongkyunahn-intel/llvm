@@ -682,15 +682,14 @@ static void instantiateSYCLIntelNoGlobalWorkOffsetAttr(
     S.AddSYCLIntelNoGlobalWorkOffsetAttr(New, *A, Result.getAs<Expr>());
 }
 
-template <typename AttrName>
-static void instantiateIntelSYCLFunctionAttr(
+static void instantiateSYCLIntelMaxGlobalWorkDimAttr(
     Sema &S, const MultiLevelTemplateArgumentList &TemplateArgs,
-    const AttrName *Attr, Decl *New) {
+    const SYCLIntelMaxGlobalWorkDimAttr *A, Decl *New) {
   EnterExpressionEvaluationContext Unevaluated(
       S, Sema::ExpressionEvaluationContext::ConstantEvaluated);
-  ExprResult Result = S.SubstExpr(Attr->getValue(), TemplateArgs);
+  ExprResult Result = S.SubstExpr(A->getValue(), TemplateArgs);
   if (!Result.isInvalid())
-    S.addIntelSingleArgAttr<AttrName>(New, *Attr, Result.getAs<Expr>());
+    S.AddSYCLIntelMaxGlobalWorkDimAttr(New, *A, Result.getAs<Expr>());
 }
 
 static void instantiateSYCLIntelFPGAMaxConcurrencyAttr(
@@ -731,6 +730,35 @@ static void instantiateSYCLIntelFPGAInitiationIntervalAttr(
   ExprResult Result = S.SubstExpr(A->getIntervalExpr(), TemplateArgs);
   if (!Result.isInvalid())
     S.AddSYCLIntelFPGAInitiationIntervalAttr(New, *A, Result.getAs<Expr>());
+}
+
+static void instantiateSYCLIntelESimdVectorizeAttr(
+    Sema &S, const MultiLevelTemplateArgumentList &TemplateArgs,
+    const SYCLIntelESimdVectorizeAttr *A, Decl *New) {
+  EnterExpressionEvaluationContext Unevaluated(
+      S, Sema::ExpressionEvaluationContext::ConstantEvaluated);
+  ExprResult Result = S.SubstExpr(A->getValue(), TemplateArgs);
+  if (!Result.isInvalid())
+    S.AddSYCLIntelESimdVectorizeAttr(New, *A, Result.getAs<Expr>());
+}
+
+static void instantiateWorkGroupSizeHintAttr(
+    Sema &S, const MultiLevelTemplateArgumentList &TemplateArgs,
+    const WorkGroupSizeHintAttr *A, Decl *New) {
+  EnterExpressionEvaluationContext Unevaluated(
+      S, Sema::ExpressionEvaluationContext::ConstantEvaluated);
+  ExprResult XResult = S.SubstExpr(A->getXDim(), TemplateArgs);
+  if (XResult.isInvalid())
+    return;
+  ExprResult YResult = S.SubstExpr(A->getYDim(), TemplateArgs);
+  if (YResult.isInvalid())
+    return;
+  ExprResult ZResult = S.SubstExpr(A->getZDim(), TemplateArgs);
+  if (ZResult.isInvalid())
+    return;
+
+  S.AddWorkGroupSizeHintAttr(New, *A, XResult.get(), YResult.get(),
+                             ZResult.get());
 }
 
 /// Determine whether the attribute A might be relevent to the declaration D.
@@ -931,8 +959,8 @@ void Sema::InstantiateAttrs(const MultiLevelTemplateArgumentList &TemplateArgs,
     }
     if (const auto *SYCLIntelMaxGlobalWorkDim =
             dyn_cast<SYCLIntelMaxGlobalWorkDimAttr>(TmplAttr)) {
-      instantiateIntelSYCLFunctionAttr<SYCLIntelMaxGlobalWorkDimAttr>(
-          *this, TemplateArgs, SYCLIntelMaxGlobalWorkDim, New);
+      instantiateSYCLIntelMaxGlobalWorkDimAttr(*this, TemplateArgs,
+                                               SYCLIntelMaxGlobalWorkDim, New);
       continue;
     }
     if (const auto *SYCLIntelLoopFuse =
@@ -968,6 +996,16 @@ void Sema::InstantiateAttrs(const MultiLevelTemplateArgumentList &TemplateArgs,
             dyn_cast<SYCLIntelFPGAInitiationIntervalAttr>(TmplAttr)) {
       instantiateSYCLIntelFPGAInitiationIntervalAttr(
           *this, TemplateArgs, SYCLIntelFPGAInitiationInterval, New);
+      continue;
+    }
+    if (const auto *SYCLIntelESimdVectorize =
+            dyn_cast<SYCLIntelESimdVectorizeAttr>(TmplAttr)) {
+      instantiateSYCLIntelESimdVectorizeAttr(*this, TemplateArgs,
+                                             SYCLIntelESimdVectorize, New);
+      continue;
+    }
+    if (const auto *A = dyn_cast<WorkGroupSizeHintAttr>(TmplAttr)) {
+      instantiateWorkGroupSizeHintAttr(*this, TemplateArgs, A, New);
       continue;
     }
     // Existing DLL attribute on the instantiation takes precedence.
@@ -1135,10 +1173,11 @@ Decl *TemplateDeclInstantiator::InstantiateTypedefNameDecl(TypedefNameDecl *D,
     SemaRef.MarkDeclarationsReferencedInType(D->getLocation(), DI->getType());
   }
 
-  // HACK: g++ has a bug where it gets the value kind of ?: wrong.
-  // libstdc++ relies upon this bug in its implementation of common_type.
-  // If we happen to be processing that implementation, fake up the g++ ?:
-  // semantics. See LWG issue 2141 for more information on the bug.
+  // HACK: 2012-10-23 g++ has a bug where it gets the value kind of ?: wrong.
+  // libstdc++ relies upon this bug in its implementation of common_type.  If we
+  // happen to be processing that implementation, fake up the g++ ?:
+  // semantics. See LWG issue 2141 for more information on the bug.  The bugs
+  // are fixed in g++ and libstdc++ 4.9.0 (2014-04-22).
   const DecltypeType *DT = DI->getType()->getAs<DecltypeType>();
   CXXRecordDecl *RD = dyn_cast<CXXRecordDecl>(D->getDeclContext());
   if (DT && RD && isa<ConditionalOperator>(DT->getUnderlyingExpr()) &&
@@ -1341,6 +1380,7 @@ Decl *TemplateDeclInstantiator::VisitVarDecl(VarDecl *D,
   if (Var->isStaticLocal())
     SemaRef.CheckStaticLocalForDllExport(Var);
 
+  SemaRef.addSyclVarDecl(Var);
   return Var;
 }
 
@@ -1796,48 +1836,18 @@ Decl *TemplateDeclInstantiator::VisitClassTemplateDecl(ClassTemplateDecl *D) {
       return nullptr;
     }
 
-    bool AdoptedPreviousTemplateParams = false;
     if (PrevClassTemplate) {
-      bool Complain = true;
-
-      // HACK: libstdc++ 4.2.1 contains an ill-formed friend class
-      // template for struct std::tr1::__detail::_Map_base, where the
-      // template parameters of the friend declaration don't match the
-      // template parameters of the original declaration. In this one
-      // case, we don't complain about the ill-formed friend
-      // declaration.
-      if (isFriend && Pattern->getIdentifier() &&
-          Pattern->getIdentifier()->isStr("_Map_base") &&
-          DC->isNamespace() &&
-          cast<NamespaceDecl>(DC)->getIdentifier() &&
-          cast<NamespaceDecl>(DC)->getIdentifier()->isStr("__detail")) {
-        DeclContext *DCParent = DC->getParent();
-        if (DCParent->isNamespace() &&
-            cast<NamespaceDecl>(DCParent)->getIdentifier() &&
-            cast<NamespaceDecl>(DCParent)->getIdentifier()->isStr("tr1")) {
-          if (cast<Decl>(DCParent)->isInStdNamespace())
-            Complain = false;
-        }
-      }
-
       TemplateParameterList *PrevParams
         = PrevClassTemplate->getMostRecentDecl()->getTemplateParameters();
 
       // Make sure the parameter lists match.
-      if (!SemaRef.TemplateParameterListsAreEqual(InstParams, PrevParams,
-                                                  Complain,
-                                                  Sema::TPL_TemplateMatch)) {
-        if (Complain)
-          return nullptr;
-
-        AdoptedPreviousTemplateParams = true;
-        InstParams = PrevParams;
-      }
+      if (!SemaRef.TemplateParameterListsAreEqual(InstParams, PrevParams, true,
+                                                  Sema::TPL_TemplateMatch))
+        return nullptr;
 
       // Do some additional validation, then merge default arguments
       // from the existing declarations.
-      if (!AdoptedPreviousTemplateParams &&
-          SemaRef.CheckTemplateParameterList(InstParams, PrevParams,
+      if (SemaRef.CheckTemplateParameterList(InstParams, PrevParams,
                                              Sema::TPC_ClassTemplate))
         return nullptr;
     }
@@ -2889,7 +2899,6 @@ Decl *TemplateDeclInstantiator::VisitParmVarDecl(ParmVarDecl *D) {
 
 Decl *TemplateDeclInstantiator::VisitTemplateTypeParmDecl(
                                                     TemplateTypeParmDecl *D) {
-  // TODO: don't always clone when decls are refcounted.
   assert(D->getTypeForDecl()->isTemplateTypeParmType());
 
   Optional<unsigned> NumExpanded;

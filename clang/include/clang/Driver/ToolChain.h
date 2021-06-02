@@ -149,6 +149,7 @@ private:
   mutable std::unique_ptr<Tool> SPIRCheck;
   mutable std::unique_ptr<Tool> SYCLPostLink;
   mutable std::unique_ptr<Tool> BackendCompiler;
+  mutable std::unique_ptr<Tool> AppendFooter;
   mutable std::unique_ptr<Tool> FileTableTform;
 
   Tool *getClang() const;
@@ -165,6 +166,7 @@ private:
   Tool *getSPIRCheck() const;
   Tool *getSYCLPostLink() const;
   Tool *getBackendCompiler() const;
+  Tool *getAppendFooter() const;
   Tool *getTableTform() const;
 
   mutable std::unique_ptr<SanitizerArgs> SanitizerArguments;
@@ -457,10 +459,10 @@ public:
                                     FileType Type = ToolChain::FT_Static) const;
 
   // Returns target specific runtime path if it exists.
-  virtual Optional<std::string> getRuntimePath() const;
+  virtual std::string getRuntimePath() const;
 
-  // Returns target specific C++ library path if it exists.
-  virtual Optional<std::string> getCXXStdlibPath() const;
+  // Returns target specific standard library path if it exists.
+  virtual std::string getStdlibPath() const;
 
   // Returns <ResourceDir>/lib/<OSName>/<arch>.  This is used by runtimes (such
   // as OpenMP) to find arch-specific libraries.
@@ -557,6 +559,12 @@ public:
   /// isThreadModelSupported() - Does this target support a thread model?
   virtual bool isThreadModelSupported(const StringRef Model) const;
 
+  virtual std::string getMultiarchTriple(const Driver &D,
+                                         const llvm::Triple &TargetTriple,
+                                         StringRef SysRoot) const {
+    return TargetTriple.str();
+  }
+
   /// ComputeLLVMTriple - Return the LLVM target triple to use, after taking
   /// command line arguments into account.
   virtual std::string
@@ -617,6 +625,9 @@ public:
   // GetUnwindLibType - Determine the unwind library type to use with the
   // given compilation arguments.
   virtual UnwindLibType GetUnwindLibType(const llvm::opt::ArgList &Args) const;
+
+  // Detect the highest available version of libc++ in include path.
+  virtual std::string detectLibcxxVersion(StringRef IncludePath) const;
 
   /// AddClangCXXStdlibIncludeArgs - Add the clang -cc1 level arguments to set
   /// the include paths to use for the given C++ standard library type.

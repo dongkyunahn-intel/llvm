@@ -33,9 +33,9 @@ def riscv_fmv_x_anyexth
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 class FPFMAH_rrr_frm<RISCVOpcode opcode, string opcodestr>
-    : RVInstR4<0b10, opcode, (outs FPR16:$rd),
-               (ins FPR16:$rs1, FPR16:$rs2, FPR16:$rs3, frmarg:$funct3),
-                opcodestr, "$rd, $rs1, $rs2, $rs3, $funct3">;
+    : RVInstR4Frm<0b10, opcode, (outs FPR16:$rd),
+                  (ins FPR16:$rs1, FPR16:$rs2, FPR16:$rs3, frmarg:$funct3),
+                  opcodestr, "$rd, $rs1, $rs2, $rs3, $funct3">;
 
 class FPFMAHDynFrmAlias<FPFMAH_rrr_frm Inst, string OpcodeStr>
     : InstAlias<OpcodeStr#" $rd, $rs1, $rs2, $rs3",
@@ -83,16 +83,16 @@ def FSH : RVInstS<0b001, OPC_STORE_FP, (outs),
           Sched<[WriteFST16, ReadStoreData, ReadFMemBase]>;
 
 def FMADD_H  : FPFMAH_rrr_frm<OPC_MADD, "fmadd.h">,
-               Sched<[WriteFMulAdd16, ReadFMulAdd16, ReadFMulAdd16, ReadFMulAdd16]>;
+               Sched<[WriteFMA16, ReadFMA16, ReadFMA16, ReadFMA16]>;
 def          : FPFMAHDynFrmAlias<FMADD_H, "fmadd.h">;
 def FMSUB_H  : FPFMAH_rrr_frm<OPC_MSUB, "fmsub.h">,
-               Sched<[WriteFMulSub16, ReadFMulSub16, ReadFMulSub16, ReadFMulSub16]>;
+               Sched<[WriteFMA16, ReadFMA16, ReadFMA16, ReadFMA16]>;
 def          : FPFMAHDynFrmAlias<FMSUB_H, "fmsub.h">;
 def FNMSUB_H : FPFMAH_rrr_frm<OPC_NMSUB, "fnmsub.h">,
-               Sched<[WriteFMulSub16, ReadFMulSub16, ReadFMulSub16, ReadFMulSub16]>;
+               Sched<[WriteFMA16, ReadFMA16, ReadFMA16, ReadFMA16]>;
 def          : FPFMAHDynFrmAlias<FNMSUB_H, "fnmsub.h">;
 def FNMADD_H : FPFMAH_rrr_frm<OPC_NMADD, "fnmadd.h">,
-               Sched<[WriteFMulAdd16, ReadFMulAdd16, ReadFMulAdd16, ReadFMulAdd16]>;
+               Sched<[WriteFMA16, ReadFMA16, ReadFMA16, ReadFMA16]>;
 def          : FPFMAHDynFrmAlias<FNMADD_H, "fnmadd.h">;
 
 def FADD_H : FPALUH_rr_frm<0b0000010, "fadd.h">,
@@ -297,6 +297,9 @@ def : Pat<(fma (fneg FPR16:$rs1), FPR16:$rs2, FPR16:$rs3),
 def : Pat<(fma (fneg FPR16:$rs1), FPR16:$rs2, (fneg FPR16:$rs3)),
           (FNMADD_H FPR16:$rs1, FPR16:$rs2, FPR16:$rs3, 0b111)>;
 
+// The ratified 20191213 ISA spec defines fmin and fmax in a way that matches
+// LLVM's fminnum and fmaxnum
+// <https://github.com/riscv/riscv-isa-manual/commit/cd20cee7efd9bac7c5aa127ec3b451749d2b3cce>.
 def : PatFpr16Fpr16<fminnum, FMIN_H>;
 def : PatFpr16Fpr16<fmaxnum, FMAX_H>;
 

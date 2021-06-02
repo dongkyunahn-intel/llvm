@@ -12,8 +12,8 @@
 #include "mlir/TableGen/GenInfo.h"
 #include "mlir/TableGen/Interfaces.h"
 #include "mlir/TableGen/OpClass.h"
-#include "mlir/TableGen/OpTrait.h"
 #include "mlir/TableGen/Operator.h"
+#include "mlir/TableGen/Trait.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/Sequence.h"
 #include "llvm/ADT/SetVector.h"
@@ -445,18 +445,12 @@ struct OperationFormat {
     operandTypes.resize(op.getNumOperands(), TypeResolution());
     resultTypes.resize(op.getNumResults(), TypeResolution());
 
-    hasImplicitTermTrait =
-        llvm::any_of(op.getTraits(), [](const OpTrait &trait) {
-          return trait.getDef().isSubClassOf("SingleBlockImplicitTerminator");
-        });
+    hasImplicitTermTrait = llvm::any_of(op.getTraits(), [](const Trait &trait) {
+      return trait.getDef().isSubClassOf("SingleBlockImplicitTerminator");
+    });
 
     hasSingleBlockTrait =
-        hasImplicitTermTrait ||
-        llvm::any_of(op.getTraits(), [](const OpTrait &trait) {
-          if (auto *native = dyn_cast<NativeOpTrait>(&trait))
-            return native->getTrait() == "::mlir::OpTrait::SingleBlock";
-          return false;
-        });
+        hasImplicitTermTrait || op.getTrait("::mlir::OpTrait::SingleBlock");
   }
 
   /// Generate the operation parser from this format.
@@ -695,7 +689,7 @@ const char *regionListEnsureTerminatorParserCode = R"(
 /// {0}: The name of the region list.
 const char *regionListEnsureSingleBlockParserCode = R"(
   for (auto &region : {0}Regions)
-    if (region.empty()) *{0}Region.emplaceBlock();
+    if (region->empty()) region->emplaceBlock();
 )";
 
 /// The code snippet used to generate a parser call for an optional region.
@@ -2416,7 +2410,7 @@ LogicalResult FormatParser::parse() {
 
   // Check for any type traits that we can use for inferring types.
   llvm::StringMap<TypeResolutionInstance> variableTyResolver;
-  for (const OpTrait &trait : op.getTraits()) {
+  for (const Trait &trait : op.getTraits()) {
     const llvm::Record &def = trait.getDef();
     if (def.isSubClassOf("AllTypesMatch")) {
       handleAllTypesMatchConstraint(def.getValueAsListOfStrings("values"),

@@ -86,8 +86,8 @@ public:
   // can be stored with 32 bits.
   uint32_t getRVA() const { return rva; }
   void setRVA(uint64_t v) {
+    // This may truncate. The writer checks for overflow later.
     rva = (uint32_t)v;
-    assert(rva == v && "RVA truncated");
   }
 
   // Returns readable/writable/executable bits.
@@ -582,6 +582,17 @@ class RVATableChunk : public NonSectionChunk {
 public:
   explicit RVATableChunk(SymbolRVASet s) : syms(std::move(s)) {}
   size_t getSize() const override { return syms.size() * 4; }
+  void writeTo(uint8_t *buf) const override;
+
+private:
+  SymbolRVASet syms;
+};
+
+// Table which contains symbol RVAs with flags. Used for /guard:ehcont.
+class RVAFlagTableChunk : public NonSectionChunk {
+public:
+  explicit RVAFlagTableChunk(SymbolRVASet s) : syms(std::move(s)) {}
+  size_t getSize() const override { return syms.size() * 5; }
   void writeTo(uint8_t *buf) const override;
 
 private:

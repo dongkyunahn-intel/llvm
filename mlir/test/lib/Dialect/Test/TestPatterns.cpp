@@ -35,6 +35,15 @@ static void handleNoResultOp(PatternRewriter &rewriter,
                                     op.operand());
 }
 
+static bool getFirstI32Result(Operation *op, Value &value) {
+  if (!Type(op->getResult(0).getType()).isSignlessInteger(32))
+    return false;
+  value = op->getResult(0);
+  return true;
+}
+
+static Value bindNativeCodeCallResult(Value value) { return value; }
+
 // Test that natives calls are only called once during rewrites.
 // OpM_Test will return Pi, increased by 1 for each subsequent calls.
 // This let us check the number of times OpM_Test was called by inspecting
@@ -128,11 +137,13 @@ static void reifyReturnShape(Operation *op) {
   // Use permutations of 2 args as operands.
   auto shapedOp = cast<OpWithShapedTypeInferTypeInterfaceOp>(op);
   SmallVector<Value, 2> shapes;
-  if (failed(shapedOp.reifyReturnTypeShapes(b, shapes)))
+  if (failed(shapedOp.reifyReturnTypeShapes(b, op->getOperands(), shapes)) ||
+      !llvm::hasSingleElement(shapes))
     return;
-  for (auto it : llvm::enumerate(shapes))
+  for (auto it : llvm::enumerate(shapes)) {
     op->emitRemark() << "value " << it.index() << ": "
                      << it.value().getDefiningOp();
+  }
 }
 
 struct TestReturnTypeDriver
@@ -462,8 +473,9 @@ struct TestNonRootReplacement : public RewritePattern {
 /// bounded recursion.
 struct TestBoundedRecursiveRewrite
     : public OpRewritePattern<TestRecursiveRewriteOp> {
-  TestBoundedRecursiveRewrite(MLIRContext *ctx)
-      : OpRewritePattern<TestRecursiveRewriteOp>(ctx) {
+  using OpRewritePattern<TestRecursiveRewriteOp>::OpRewritePattern;
+
+  void initialize() {
     // The conversion target handles bounding the recursion of this pattern.
     setHasBoundedRewriteRecursion();
   }
@@ -486,6 +498,21 @@ struct TestNestedOpCreationUndoRewrite
                                 PatternRewriter &rewriter) const final {
     // rewriter.replaceOpWithNewOp<IllegalOpWithRegion>(op);
     rewriter.replaceOpWithNewOp<IllegalOpWithRegion>(op);
+    return success();
+  };
+};
+
+// This pattern matches `test.blackhole` and delete this op and its producer.
+struct TestReplaceEraseOp : public OpRewritePattern<BlackHoleOp> {
+  using OpRewritePattern<BlackHoleOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(BlackHoleOp op,
+                                PatternRewriter &rewriter) const final {
+    Operation *producer = op.getOperand().getDefiningOp();
+    // Always erase the user before the producer, the framework should handle
+    // this correctly.
+    rewriter.eraseOp(op);
+    rewriter.eraseOp(producer);
     return success();
   };
 };
@@ -566,7 +593,8 @@ struct TestLegalizePatternDriver
              TestChangeProducerTypeI32ToF32, TestChangeProducerTypeF32ToF64,
              TestChangeProducerTypeF32ToInvalid, TestUpdateConsumerType,
              TestNonRootReplacement, TestBoundedRecursiveRewrite,
-             TestNestedOpCreationUndoRewrite>(&getContext());
+             TestNestedOpCreationUndoRewrite, TestReplaceEraseOp>(
+            &getContext());
     patterns.add<TestDropOpSignatureConversion>(&getContext(), converter);
     mlir::populateFuncOpTypeConversionPattern(patterns, converter);
     mlir::populateCallOpTypeConversionPattern(patterns, converter);

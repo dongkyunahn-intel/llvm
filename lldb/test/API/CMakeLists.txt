@@ -1,5 +1,5 @@
 add_custom_target(lldb-api-test-deps)
-add_dependencies(lldb-api-test-deps lldb-test-deps)
+add_dependencies(lldb-api-test-deps lldb-test-depends)
 
 add_lit_testsuites(LLDB-API
   ${CMAKE_CURRENT_SOURCE_DIR}
@@ -17,7 +17,7 @@ function(add_python_test_target name test_script args comment)
     COMMENT "${comment}"
     USES_TERMINAL
     )
-  add_dependencies(${name} lldb-test-deps)
+  add_dependencies(${name} lldb-test-depends)
 endfunction()
 
 # The default architecture with which to compile test executables is the
@@ -116,7 +116,7 @@ if(CMAKE_HOST_APPLE)
     list(APPEND LLDB_TEST_COMMON_ARGS --out-of-tree-debugserver)
     add_lldb_test_dependency(debugserver)
   else()
-    message(STATUS "LLDB Tests use just-built debug server")
+    message(STATUS "LLDB tests use just-built debug server")
   endif()
 endif()
 

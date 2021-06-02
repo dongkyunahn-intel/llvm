@@ -795,6 +795,8 @@ function. The operand fields are:
   * ``swiftcc`` : code 16
   * ``cxx_fast_tlscc``: code 17
   * ``tailcc`` : code 18
+  * ``cfguard_checkcc`` : code 19
+  * ``swifttailcc`` : code 20
   * ``x86_stdcallcc``: code 64
   * ``x86_fastcallcc``: code 65
   * ``arm_apcscc``: code 66
@@ -1321,6 +1323,13 @@ operand fields are
 
 * *paramty*: Zero or more type indices representing the parameter types of the
   function
+
+TYPE_CODE_X86_AMX Record
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+``[X86_AMX]``
+
+The ``X86_AMX`` record (code 24) adds an ``x86_amx`` type to the type table.
 
 .. _CONSTANTS_BLOCK:
 

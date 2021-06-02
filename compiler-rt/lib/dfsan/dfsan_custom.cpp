@@ -38,6 +38,7 @@
 
 #include "dfsan/dfsan.h"
 #include "dfsan/dfsan_chained_origin_depot.h"
+#include "dfsan/dfsan_flags.h"
 #include "dfsan/dfsan_thread.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
@@ -1573,6 +1574,7 @@ int __dfsw_sigemptyset(sigset_t *set, dfsan_label set_label,
                        dfsan_label *ret_label) {
   int ret = sigemptyset(set);
   dfsan_set_label(0, set, sizeof(sigset_t));
+  *ret_label = 0;
   return ret;
 }
 

@@ -467,6 +467,32 @@ calls.
   }];
 }
 
+def MustTailDocs : Documentation {
+  let Category = DocCatStmt;
+  let Content = [{
+If a ``return`` statement is marked ``musttail``, this indicates that the
+compiler must generate a tail call for the program to be correct, even when
+optimizations are disabled. This guarantees that the call will not cause
+unbounded stack growth if it is part of a recursive cycle in the call graph.
+
+If the callee is a virtual function that is implemented by a thunk, there is
+no guarantee in general that the thunk tail-calls the implementation of the
+virtual function, so such a call in a recursive cycle can still result in
+unbounded stack growth.
+
+``clang::musttail`` can only be applied to a ``return`` statement whose value
+is the result of a function call (even functions returning void must use
+``return``, although no value is returned). The target function must have the
+same number of arguments as the caller. The types of the return value and all
+arguments must be similar according to C++ rules (differing only in cv
+qualifiers or array size), including the implicit "this" argument, if any.
+Any variables in scope, including all arguments to the function and the
+return value must be trivially destructible. The calling convention of the
+caller and callee must match, and they must not be variadic functions or have
+old style K&R C function declarations.
+  }];
+}
+
 def AssertCapabilityDocs : Documentation {
   let Category = DocCatFunction;
   let Heading = "assert_capability, assert_shared_capability";
@@ -2477,25 +2503,76 @@ device kernel, the attribute is not ignored and it is propagated to the kernel.
     [[intel::num_simd_work_items(N)]] void operator()() const {}
   };
 
-If the`` intel::reqd_work_group_size`` or ``cl::reqd_work_group_size``
-attribute is specified on a declaration along with a
-intel::num_simd_work_items attribute, the work group size attribute
-argument (the first argument) must be evenly divisible by the argument specified
-in the ``intel::num_simd_work_items`` attribute.
+If the ``reqd_work_group_size`` attribute is specified on a declaration along
+with ``num_simd_work_items``, the required work group size specified
+by ``num_simd_work_items`` attribute must evenly divide the index that
+increments fastest in the ``reqd_work_group_size`` attribute.
+
+The arguments to ``reqd_work_group_size`` are ordered based on which index
+increments the fastest. In OpenCL, the first argument is the index that
+increments the fastest, and in SYCL, the last argument is the index that
+increments the fastest.
+
+In OpenCL, all three arguments are required.
+
+In SYCL, the attribute accepts either one, two, or three arguments; in each
+form, the last (or only) argument is the index that increments fastest.
+The number of arguments passed to the attribute must match the dimensionality
+of the kernel the attribute is applied to.
 
 .. code-block:: c++
 
+  // Note, '64' is evenly divisible by '4'; in SYCL, the last
+  // argument to the attribute is the one which increments fastest.
   struct func {
     [[intel::num_simd_work_items(4)]]
-    [[intel::reqd_work_group_size(64, 64, 64)]]
+    [[intel::reqd_work_group_size(7, 4, 64)]]
     void operator()() const {}
   };
 
+  // Note, '8' is evenly divisible by '8'; in SYCL, the last
+  // argument to the attribute is the one which increments fastest.
   struct bar {
-    [[intel::reqd_work_group_size(64, 64, 64)]]
+    [[intel::reqd_work_group_size(1, 1, 8)]]
+    [[intel::num_simd_work_items(8)]]
+    void operator()() const {}
+  };
+
+  // Note, '10' is evenly divisible by '5'; in SYCL, the last
+  // argument to the attribute is the one which increments fastest.
+  [[cl::reqd_work_group_size(7, 5, 10)]]
+  [[intel::num_simd_work_items(5)]] void fun2() {}
+
+  // Note, '8' is evenly divisible by '4'; in SYCL, the last
+  // argument to the attribute is the one which increments fastest.
+  [[intel::num_simd_work_items(4)]]
+  [[cl::reqd_work_group_size(5, 4, 8)]] void fun3() {}
+
+  // Note, '8' is evenly divisible by '8'; in SYCL, the last
+  // argument to the attribute is the one which increments fastest.
+  struct func1 {
+    [[intel::num_simd_work_items(8)]]
+    [[cl::reqd_work_group_size(1, 1, 8)]]
+    void operator()() const {}
+  };
+
+  // Note, '8' is evenly divisible by '4'; in SYCL, the last
+  // argument to the attribute is the one which increments fastest.
+  struct bar1 {
+    [[cl::reqd_work_group_size(7, 4, 8)]]
     [[intel::num_simd_work_items(4)]]
     void operator()() const {}
   };
+
+  // Note, '4' is evenly divisible by '2'; in SYCL, the last
+  // argument to the attribute is the one which increments fastest.
+  [[intel::num_simd_work_items(2)]]
+  __attribute__((reqd_work_group_size(3, 2, 4))) void test();
+
+  // Note, '8' is evenly divisible by '2'; in SYCL, the last
+  // argument to the attribute is the one which increments fastest.
+  __attribute__((reqd_work_group_size(3, 2, 8)))
+  [intel::num_simd_work_items(2)]] void test();
 
   }];
 }
@@ -2546,69 +2623,144 @@ generated code appropriately for the kernel to which attribute is applied.
 While semantic of this attribute is the same between OpenCL and SYCL,
 spelling is a bit different: 
 
-SYCL 1.2.1 describes ``[[cl::reqd_work_group_size(X, Y, Z)]]`` spelling: this
-attribute is legal on device functions and is propagated down to any caller of 
-those device functions, such that the kernel attributes are the sum of all 
-attributes of all device functions called in this kernel.
-See section 6.7 Attributes for more details.
+SYCL 2020 describes the ``[[sycl::reqd_work_group_size(X, Y, Z)]]`` spelling
+in detail. This attribute indicates that the kernel must be launched with the
+specified work-group size. The order of the arguments matches the constructor
+of the group class. Each argument to the attribute must be an integral constant
+expression. The dimensionality of the attribute variant used must match the
+dimensionality of the work-group used to invoke the kernel. This spelling
+allows the Y and Z arguments to be optional. If not provided by the user, the
+value of Y and Z defaults to 1. See section 5.8.1 Kernel Attributes for more
+details.
 
 .. code-block:: c++
 
-  [[cl::reqd_work_group_size(4, 4, 4)]] void foo() {}
+  [[sycl::reqd_work_group_size(4, 4, 4)]] void foo() {}
 
   class Foo {
   public:
-    [[cl::reqd_work_group_size(2, 2, 2)]] void operator()() const {}
+    [[sycl::reqd_work_group_size(2)]] void operator()() const {} // optional arguments default to 1
   };
 
   template <int N, int N1, int N2>
   class Functor {
   public:
-    [[cl::reqd_work_group_size(N, N1, N2)]] void operator()() const {}
+    [[sycl::reqd_work_group_size(N, N1, N2)]] void operator()() const {}
   };
 
   template <int N, int N1, int N2>
-  [[cl::reqd_work_group_size(N, N1, N2)]] void func() {}
+  [[sycl::reqd_work_group_size(N, N1, N2)]] void func() {}
+
+The ``[[cl::reqd_work_group_size(X, Y, Z)]]`` and
+``__attribute__((reqd_work_group_size(X, Y, Z)))`` spellings are both
+deprecated in SYCL 2020.
 
 As an Intel extension, the ``[[intel::reqd_work_group_size(X, Y, Z)]]``
-spelling is supported. This spelling allows the Y and Z arguments to be
-optional. If not provided by the user, the value of Y and Z defaults to 1.
-This simplifies usage of the attribute when a 1- or 2-dimensional ND-range
-is assumed.
+spelling is supported with the same semantics as the
+``[[sycl::reqd_work_group_size(X, Y, Z)]]`` spelling.
 
-.. code-block:: c++
-
-  [[intel::reqd_work_group_size(5)]]
-  // identical to [[intel::reqd_work_group_size(5, 1, 1)]]
-  void quux() {}
-
-  [[intel::reqd_work_group_size(5, 5)]]
-  // identical to [[intel::reqd_work_group_size(5, 5, 1)]]
-  void qux() {}
-
-  [[intel::reqd_work_group_size(4, 4, 4)]] void foo() {}
-
-  class Foo {
-  public:
-    [[intel::reqd_work_group_size(2, 2, 2)]] void operator()() const {}
-  };
-
-  template <int X, int Y, int Z>
-  class Functor {
-  public:
-    [[intel::reqd_work_group_size(X, Y, Z)]] void operator()() const {}
-  };
-
-  template <int X, int Y, int Z>
-  [[intel::reqd_work_group_size(X, Y, Z)]] void func() {}
-
-In OpenCL C, this attribute is available in GNU spelling
+In OpenCL C, this attribute is available with the GNU spelling
 (``__attribute__((reqd_work_group_size(X, Y, Z)))``), see section
 6.7.2 Optional Attribute Qualifiers of OpenCL 1.2 specification for details.
 
 .. code-block:: c++
 
   __kernel __attribute__((reqd_work_group_size(8, 16, 32))) void test() {}
+
+  }];
+}
+
+def WorkGroupSizeHintAttrDocs : Documentation {
+  let Category = DocCatFunction;
+  let Content = [{
+Applies to a device function/lambda function. Hint to the compiler on the work-
+group size most likely to be used when launching the kernel at runtime. Each
+argument must be a nonzero integral constant expression whose value is
+unsigned. The number of dimensional values defined provide additional
+information to the compiler on the dimensionality most likely to be used when
+launching the kernel at runtime.
+
+The GNU spelling is deprecated in SYCL mode.
+
+.. code-block:: c++
+
+  [[sycl::work_group_size_hint(4, 4, 4)]] void foo() {}
+
+  class Foo {
+  public:
+    [[sycl::work_group_size_hint(2, 2, 2)]] void operator()() const {}
+  };
+
+The arguments to ``reqd_work_group_size`` are ordered based on which index
+increments the fastest. In OpenCL, the first argument is the index that
+increments the fastest, and in SYCL, the last argument is the index that
+increments the fastest.
+
+In OpenCL, all three arguments are required.
+
+In SYCL, the attribute accepts either one, two, or three arguments; in each
+form, the last (or only) argument is the index that increments fastest. The
+number of arguments passed to the attribute must match the dimensionality of
+the kernel the attribute is applied to.
+
+If the ``reqd_work_group_size attribute`` is specified on a declaration along
+with ``num_simd_work_items``, the required work group size specified by
+``num_simd_work_items`` must evenly divide the index that increments fastest
+in the ``reqd_work_group_size`` attribute.
+
+.. code-block:: c++
+
+  // Note, '64' is evenly divisible by '4'; in SYCL, the last
+  // argument to the attribute is the one which increments fastest.
+  struct func {
+    [[intel::num_simd_work_items(4)]]
+    [[intel::reqd_work_group_size(7, 4, 64)]]
+    void operator()() const {}
+  };
+
+  // Note, '8' is evenly divisible by '8'; in SYCL, the last
+  // argument to the attribute is the one which increments fastest.
+  struct bar {
+    [[intel::reqd_work_group_size(1, 1, 8)]]
+    [[intel::num_simd_work_items(8)]]
+    void operator()() const {}
+  };
+
+  // Note, '10' is evenly divisible by '5'; in SYCL, the last
+  // argument to the attribute is the one which increments fastest.
+  [[cl::reqd_work_group_size(7, 5, 10)]]
+  [[intel::num_simd_work_items(5)]] void fun2() {}
+
+  // Note, '8' is evenly divisible by '4'; in SYCL, the last
+  // argument to the attribute is the one which increments fastest.
+  [[intel::num_simd_work_items(4)]]
+  [[cl::reqd_work_group_size(5, 4, 8)]] void fun3() {}
+
+  // Note, '8' is evenly divisible by '8'; in SYCL, the last
+  // argument to the attribute is the one which increments fastest.
+  struct func1 {
+    [[intel::num_simd_work_items(8)]]
+    [[cl::reqd_work_group_size(1, 1, 8)]]
+    void operator()() const {}
+  };
+  
+  // Note, '8' is evenly divisible by '4'; in SYCL, the last
+  // argument to the attribute is the one which increments fastest.
+  struct bar1 {
+    [[cl::reqd_work_group_size(7, 4, 8)]]
+    [[intel::num_simd_work_items(4)]]
+    void operator()() const {}
+  };
+
+  // Note, '4' is evenly divisible by '2'; in SYCL, the last
+  // argument to the attribute is the one which increments fastest.
+  [[intel::num_simd_work_items(2)]]
+  __attribute__((reqd_work_group_size(3, 2, 4))) void test();
+ 
+  // Note, '8' is evenly divisible by '2'; in SYCL, the last
+  // argument to the attribute is the one which increments fastest.
+  __attribute__((reqd_work_group_size(3, 2, 8)))
+  [intel::num_simd_work_items(2)]] void test();
 
   }];
 }
@@ -2869,7 +3021,7 @@ This attribute applies to a loop or a function. It indicates that the
 loop/function should allow no more than N threads or iterations to execute it
 simultaneously. N must be a non negative integer. '0' indicates the
 max_concurrency case to be unbounded. Cannot be applied multiple times to the
-same loop.
+same loop or function, or in conjunction with ``disable_loop_pipelining``.
 
 .. code-block:: c++
 
@@ -2935,17 +3087,53 @@ def SYCLIntelFPGADisableLoopPipeliningAttrDocs : Documentation {
 This attribute applies to a loop or a function. Takes no arguments and
 disables pipelining of the loop or function data path, causing the loop
 or function to be executed serially. Cannot be used on the same loop or
-function in conjunction with max_interleaving, speculated_iterations,
-max_concurrency, initiation_interval, or ivdep.
+function, or in conjunction with ``max_interleaving``,
+``speculated_iterations``, ``max_concurrency``, ``initiation_interval``,
+or ``ivdep``.
 
 .. code-block:: c++
 
   void foo() {
     int var = 0;
-    [[intel::disable_loop_pipelining] for (int i = 0; i < 10; ++i) var++;
+    [[intel::disable_loop_pipelining]] for (int i = 0; i < 10; ++i) var++;
   }
 
-  [[intel::disable_loop_pipelining] void foo1() { }
+  [[intel::disable_loop_pipelining]] void foo1() { }
+
+  }];
+}
+
+def SYCLIntelFPGALoopCountAttrDocs : Documentation {
+  let Category = DocCatVariable;
+  let Heading = "intel::loop_count_min, intel::loop_count_max, intel::loop_count_avg";
+  let Content = [{
+The loop count attributes specify the minimum, maximum, or average number of
+iterations for a ``for`` loop. These are hints that the user specify that can be
+used by some of the loop optimization to make decisions such as if the loop
+should be unrolled. It is a way for the user to provide some information without
+using PGO.
+
+.. code-block:: c++
+
+  void foo(int *array, size_t n) {
+    [[intel::loop_count_min(4)]] for (int i = 0; i < n; ++i) array[i] = 0;
+  }
+
+  void zoo(int *array, size_t n) {
+    [[intel::loop_count_max(10)]] for (int i = 0; i < n; ++i) array[i] = 0;
+  }
+
+  void goo(int *array, size_t n) {
+    [[intel::loop_count_min(3)]]
+    [[intel::loop_count_max(10)]]
+    [[intel::loop_count_avg(5)]]
+    for (int i = 0; i < n; ++i) array[i] = 0;
+  }
+
+  template<int N>
+  void bar() {
+    [[intel::loop_count_avg(N)]] for(;;) { }
+  }
 
   }];
 }
@@ -4045,7 +4233,7 @@ supported in C++.
 By default, a reference is considered to refer to its referenced object, a
 pointer is considered to refer to its pointee, a ``std::initializer_list<T>``
 is considered to refer to its underlying array, and aggregates (arrays and
-simple ``struct``s) are considered to refer to all objects that their
+simple ``struct``\s) are considered to refer to all objects that their
 transitive subobjects refer to.
 
 Clang warns if it is able to detect that an object or reference refers to
@@ -4227,7 +4415,9 @@ def UnrollHintDocs : Documentation {
   let Content = [{
 Loop unrolling optimization hints can be specified with ``#pragma unroll`` and
 ``#pragma nounroll``. The pragma is placed immediately before a for, while,
-do-while, or c++11 range-based for loop.
+do-while, or c++11 range-based for loop. GCC's loop unrolling hints
+``#pragma GCC unroll`` and ``#pragma GCC nounroll`` are also supported and have
+identical semantics to ``#pragma unroll`` and ``#pragma nounroll``.
 
 Specifying ``#pragma unroll`` without a parameter directs the loop unroller to
 attempt to fully unroll the loop if the trip count is known at compile time and
@@ -4353,9 +4543,9 @@ This attribute can be used in both OpenCL and SYCL.
 
 OpenCL documentation:
 The optional attribute intel_reqd_sub_group_size can be used to indicate that
-the kernel must be compiled and executed with the specified subgroup size. When
+the kernel must be compiled and executed with the specified sub group size. When
 this attribute is present, get_max_sub_group_size() is guaranteed to return the
-specified integer value. This is important for the correctness of many subgroup
+specified integer value. This is important for the correctness of many sub group
 algorithms, and in some cases may be used by the compiler to generate more optimal
 code. See `cl_intel_required_subgroup_size
 <https://www.khronos.org/registry/OpenCL/extensions/intel/cl_intel_required_subgroup_size.txt>`
@@ -4365,6 +4555,13 @@ SYCL documentation:
 The [[intel::reqd_sub_group_size(n)]] attribute indicates that the kernel must
 be compiled and executed with a sub-group of size n. The value of n must be set
 to a sub-group size supported by the device, or device compilation will fail.
+
+The ``[[intel::sub_group_size(n)]]`` attribute has the same effect as the other
+attribute spellings, except that it follows the SYCL 2020 Attribute Rules. See
+ the ``[[intel::named_sub_group_size(NAME)]]`` documentation for clarification.
+
+This attribute is mutually exclusive with ``[[intel::named_sub_group_size(NAME)]]``
+and ``[[intel::sycl_explicit_simd]]``.
 
 In addition to device functions, the required sub-group size attribute may also
 be specified in the definition of a named functor object and lambda functions,
@@ -4387,6 +4584,47 @@ as in the examples below:
 
 See Sub-groups for NDRange Parallelism proposal in sycl/doc/extensions/sub_group_ndrange/sub_group_ndrange.md
   }];
+}
+
+def IntelNamedSubGroupSizeDocs : Documentation {
+  let Category = DocCatFunction;
+  let Content = [{
+The ``[[intel::named_sub_group_size(NAME)]]`` attribute works similar to
+``[[intel::sub_group_size(N)]]`` attribute in that it defines the specific
+sub group size for the kernel. The ``[[intel::named_sub_group_size(NAME)]]``
+form accepts a required parameter of either ``automatic`` or ``primary``.
+
+``automatic`` specifies that the implementation is free to select any of the
+valid sub-group sizes associated with the device to which the kernel is
+submitted.  ``primary`` specifies that the implementation should select the
+device's primary sub-group size as reported by
+``info::device::primary_sub_group_size``.
+
+This attribute may not be combined with ``[[intel::sub_group_size(N)]]``, as
+the two attributes have different meanings. It is also mutually exclusive with
+``[[intel::sycl_explicit_simd]]``.
+
+In addition to the attributes, a default sub-group size strategy may be
+specified by the ``-fsycl-default-sub-group-size`` command line option, which
+accepts either ``automatic``, ``primary``, or a default size as an integer.
+These values match and have the same behavior as the ``automatic``, ``primary``,
+and ``[[intel::sub_group_size(N)]]`` values respectively.
+
+SYCL 2020 Attribute Rules:
+SYCL 2020 specifies that kernel-type attributes should only be specified on the
+kernel or a ``SYCL_EXTERNAL`` function. This implementation permits these
+attributes to appear on all function declarations for the purposes of
+self-documenting declarations. However, these attributes must match the kernel's
+sub-group size as configured by the command line, or via an attribute
+specifically.
+
+In addition to the SYCL 2020 Attribute Rules, this attribute and the
+``[[intel::sub_group_size(N)]]`` attribute also require that any
+``SYCL_EXTERNAL`` functions defined in a different translation unit must have a
+matching sub-group size specification, so ``SYCL_EXTERNAL`` functions not
+defined in this translation unit must also have a matching sub-group
+specification to the kernel function that calls it.
+}];
 }
 
 def OpenCLAccessDocs : Documentation {
@@ -4730,6 +4968,16 @@ parameter is undefined behavior, which the optimizer may take advantage of to,
 e.g., remove null checks. The ``_Nonnull`` type qualifier indicates that a
 pointer cannot be null in a more general manner (because it is part of the type
 system) and does not imply undefined behavior, making it more widely applicable.
+  }];
+}
+
+def RestrictDocs : Documentation {
+  let Category = DocCatFunction;
+  let Heading = "malloc";
+  let Content = [{
+The ``malloc`` attribute indicates that the function acts like a system memory
+allocation function, returning a pointer to allocated storage disjoint from the
+storage for any other object accessible to the caller.
   }];
 }
 
@@ -5707,6 +5955,26 @@ could have a different set of data members and thus have a different size. Using
 the ``abi_tag`` attribute, it is possible to have different mangled names for
 a global variable of the class type. Therefore, the old code could keep using
 the old mangled name and the new code will use the new mangled name with tags.
+  }];
+}
+
+def BuiltinAliasDocs : Documentation {
+  let Category = DocCatFunction;
+  let Heading = "clang::builtin_alias, clang_builtin_alias";
+  let Content = [{
+This attribute is used in the implementation of the C intrinsics.
+It allows the C intrinsic functions to be declared using the names defined
+in target builtins, and still be recognized as clang builtins equivalent to the
+underlying name. For example, ``riscv_vector.h`` declares the function ``vadd``
+with ``__attribute__((clang_builtin_alias(__builtin_rvv_vadd_vv_i8m1)))``.
+This ensures that both functions are recognized as that clang builtin,
+and in the latter case, the choice of which builtin to identify the
+function as can be deferred until after overload resolution.
+
+This attribute can only be used to set up the aliases for certain ARM/RISC-V
+C intrinsic functions; it is intended for use only inside ``arm_*.h`` and
+``riscv_*.h`` and is not a general mechanism for declaring arbitrary aliases
+for clang builtin functions.
   }];
 }
 
@@ -6704,6 +6972,10 @@ This attribute can only be used to set up the aliases for certain Arm
 intrinsic functions; it is intended for use only inside ``arm_*.h``
 and is not a general mechanism for declaring arbitrary aliases for
 clang builtin functions.
+
+In order to avoid duplicating the attribute definitions for similar
+purpose for other architecture, there is a general form for the
+attribute `clang_builtin_alias`.
   }];
 }
 

@@ -43,7 +43,14 @@ template <class Allocator> struct TSDRegistryExT {
     initLinkerInitialized(Instance); // Sets Initialized.
   }
 
-  void unmapTestOnly() {}
+  void unmapTestOnly() {
+    Allocator *Instance =
+        reinterpret_cast<Allocator *>(pthread_getspecific(PThreadKey));
+    if (!Instance)
+      return;
+    ThreadTSD.commitBack(Instance);
+    State = {};
+  }
 
   ALWAYS_INLINE void initThreadMaybe(Allocator *Instance, bool MinimalInit) {
     if (LIKELY(State.InitState != ThreadState::NotInitialized))
@@ -101,9 +108,9 @@ private:
     Instance->callPostInitCallback();
   }
 
-  pthread_key_t PThreadKey;
-  bool Initialized;
-  atomic_u8 Disabled;
+  pthread_key_t PThreadKey = {};
+  bool Initialized = false;
+  atomic_u8 Disabled = {};
   TSD<Allocator> FallbackTSD;
   HybridMutex Mutex;
   static thread_local ThreadState State;

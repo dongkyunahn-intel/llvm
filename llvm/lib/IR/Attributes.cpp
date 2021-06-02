@@ -195,6 +195,10 @@ Attribute Attribute::getWithPreallocatedType(LLVMContext &Context, Type *Ty) {
   return get(Context, Preallocated, Ty);
 }
 
+Attribute Attribute::getWithInAllocaType(LLVMContext &Context, Type *Ty) {
+  return get(Context, InAlloca, Ty);
+}
+
 Attribute
 Attribute::getWithAllocSizeArgs(LLVMContext &Context, unsigned ElemSizeArg,
                                 const Optional<unsigned> &NumElemsArg) {
@@ -281,6 +285,13 @@ uint64_t Attribute::getValueAsInt() const {
   assert(isIntAttribute() &&
          "Expected the attribute to be an integer attribute!");
   return pImpl->getValueAsInt();
+}
+
+bool Attribute::getValueAsBool() const {
+  if (!pImpl) return false;
+  assert(isStringAttribute() &&
+         "Expected the attribute to be a string attribute!");
+  return pImpl->getValueAsBool();
 }
 
 StringRef Attribute::getKindAsString() const {
@@ -373,12 +384,12 @@ std::string Attribute::getAsString(bool InAttrGrp) const {
     return "swifterror";
   if (hasAttribute(Attribute::SwiftSelf))
     return "swiftself";
+  if (hasAttribute(Attribute::SwiftAsync))
+    return "swiftasync";
   if (hasAttribute(Attribute::InaccessibleMemOnly))
     return "inaccessiblememonly";
   if (hasAttribute(Attribute::InaccessibleMemOrArgMemOnly))
     return "inaccessiblemem_or_argmemonly";
-  if (hasAttribute(Attribute::InAlloca))
-    return "inalloca";
   if (hasAttribute(Attribute::InlineHint))
     return "inlinehint";
   if (hasAttribute(Attribute::InReg))
@@ -484,24 +495,30 @@ std::string Attribute::getAsString(bool InAttrGrp) const {
   if (hasAttribute(Attribute::MustProgress))
     return "mustprogress";
 
-  const bool IsByVal = hasAttribute(Attribute::ByVal);
-  if (IsByVal || hasAttribute(Attribute::StructRet)) {
+  if (isTypeAttribute()) {
     std::string Result;
-    Result += IsByVal ? "byval" : "sret";
-    if (Type *Ty = getValueAsType()) {
-      raw_string_ostream OS(Result);
-      Result += '(';
-      Ty->print(OS, false, true);
-      OS.flush();
-      Result += ')';
-    }
-    return Result;
-  }
-
-  const bool IsByRef = hasAttribute(Attribute::ByRef);
-  if (IsByRef || hasAttribute(Attribute::Preallocated)) {
-    std::string Result = IsByRef ? "byref" : "preallocated";
     raw_string_ostream OS(Result);
+
+    switch (getKindAsEnum()) {
+    case Attribute::ByVal:
+      Result += "byval";
+      break;
+    case Attribute::StructRet:
+      Result += "sret";
+      break;
+    case Attribute::ByRef:
+      Result += "byref";
+      break;
+    case Attribute::Preallocated:
+      Result += "preallocated";
+      break;
+    case Attribute::InAlloca:
+      Result += "inalloca";
+      break;
+    default:
+      llvm_unreachable("unhandled type attribute");
+    }
+
     Result += '(';
     getValueAsType()->print(OS, false, true);
     OS.flush();
@@ -599,6 +616,14 @@ std::string Attribute::getAsString(bool InAttrGrp) const {
   llvm_unreachable("Unknown attribute");
 }
 
+bool Attribute::hasParentContext(LLVMContext &C) const {
+  assert(isValid() && "invalid Attribute doesn't refer to any context");
+  FoldingSetNodeID ID;
+  pImpl->Profile(ID);
+  void *Unused;
+  return C.pImpl->AttrsSet.FindNodeOrInsertPos(ID, Unused) == pImpl;
+}
+
 bool Attribute::operator<(Attribute A) const {
   if (!pImpl && !A.pImpl) return false;
   if (!pImpl) return true;
@@ -632,6 +657,11 @@ Attribute::AttrKind AttributeImpl::getKindAsEnum() const {
 uint64_t AttributeImpl::getValueAsInt() const {
   assert(isIntAttribute());
   return static_cast<const IntAttributeImpl *>(this)->getValue();
+}
+
+bool AttributeImpl::getValueAsBool() const {
+  assert(getValueAsString().empty() || getValueAsString() == "false" || getValueAsString() == "true");
+  return getValueAsString() == "true";
 }
 
 StringRef AttributeImpl::getKindAsString() const {
@@ -751,8 +781,12 @@ AttributeSet AttributeSet::removeAttribute(LLVMContext &C,
 }
 
 AttributeSet AttributeSet::removeAttributes(LLVMContext &C,
-                                              const AttrBuilder &Attrs) const {
+                                            const AttrBuilder &Attrs) const {
   AttrBuilder B(*this);
+  // If there is nothing to remove, directly return the original set.
+  if (!B.overlaps(Attrs))
+    return *this;
+
   B.remove(Attrs);
   return get(C, B);
 }
@@ -809,6 +843,10 @@ Type *AttributeSet::getPreallocatedType() const {
   return SetNode ? SetNode->getPreallocatedType() : nullptr;
 }
 
+Type *AttributeSet::getInAllocaType() const {
+  return SetNode ? SetNode->getInAllocaType() : nullptr;
+}
+
 std::pair<unsigned, Optional<unsigned>> AttributeSet::getAllocSizeArgs() const {
   return SetNode ? SetNode->getAllocSizeArgs()
                  : std::pair<unsigned, Optional<unsigned>>(0, 0);
@@ -821,6 +859,14 @@ std::pair<unsigned, unsigned> AttributeSet::getVScaleRangeArgs() const {
 
 std::string AttributeSet::getAsString(bool InAttrGrp) const {
   return SetNode ? SetNode->getAsString(InAttrGrp) : "";
+}
+
+bool AttributeSet::hasParentContext(LLVMContext &C) const {
+  assert(hasAttributes() && "empty AttributeSet doesn't refer to any context");
+  FoldingSetNodeID ID;
+  SetNode->Profile(ID);
+  void *Unused;
+  return C.pImpl->AttrsSetNodes.FindNodeOrInsertPos(ID, Unused) == SetNode;
 }
 
 AttributeSet::iterator AttributeSet::begin() const {
@@ -914,6 +960,9 @@ AttributeSetNode *AttributeSetNode::get(LLVMContext &C, const AttrBuilder &B) {
       break;
     case Attribute::Preallocated:
       Attr = Attribute::getWithPreallocatedType(C, B.getPreallocatedType());
+      break;
+    case Attribute::InAlloca:
+      Attr = Attribute::getWithInAllocaType(C, B.getInAllocaType());
       break;
     case Attribute::Alignment:
       assert(B.getAlignment() && "Alignment must be set");
@@ -1017,6 +1066,12 @@ Type *AttributeSetNode::getByRefType() const {
 
 Type *AttributeSetNode::getPreallocatedType() const {
   if (auto A = findEnumAttribute(Attribute::Preallocated))
+    return A->getValueAsType();
+  return nullptr;
+}
+
+Type *AttributeSetNode::getInAllocaType() const {
+  if (auto A = findEnumAttribute(Attribute::InAlloca))
     return A->getValueAsType();
   return nullptr;
 }
@@ -1429,17 +1484,12 @@ AttributeList AttributeList::removeAttribute(LLVMContext &C, unsigned Index,
 AttributeList
 AttributeList::removeAttributes(LLVMContext &C, unsigned Index,
                                 const AttrBuilder &AttrsToRemove) const {
-  if (!pImpl)
-    return {};
-
-  Index = attrIdxToArrayIdx(Index);
-  SmallVector<AttributeSet, 4> AttrSets(this->begin(), this->end());
-  if (Index >= AttrSets.size())
-    AttrSets.resize(Index + 1);
-
-  AttrSets[Index] = AttrSets[Index].removeAttributes(C, AttrsToRemove);
-
-  return getImpl(C, AttrSets);
+  AttributeSet Attrs = getAttributes(Index);
+  AttributeSet NewAttrs = Attrs.removeAttributes(C, AttrsToRemove);
+  // If nothing was removed, return the original list.
+  if (Attrs == NewAttrs)
+    return *this;
+  return setAttributes(C, Index, NewAttrs);
 }
 
 AttributeList AttributeList::removeAttributes(LLVMContext &C,
@@ -1562,6 +1612,10 @@ MaybeAlign AttributeList::getParamAlignment(unsigned ArgNo) const {
   return getAttributes(ArgNo + FirstArgIndex).getAlignment();
 }
 
+MaybeAlign AttributeList::getParamStackAlignment(unsigned ArgNo) const {
+  return getAttributes(ArgNo + FirstArgIndex).getStackAlignment();
+}
+
 Type *AttributeList::getParamByValType(unsigned Index) const {
   return getAttributes(Index+FirstArgIndex).getByValType();
 }
@@ -1576,6 +1630,10 @@ Type *AttributeList::getParamByRefType(unsigned Index) const {
 
 Type *AttributeList::getParamPreallocatedType(unsigned Index) const {
   return getAttributes(Index + FirstArgIndex).getPreallocatedType();
+}
+
+Type *AttributeList::getParamInAllocaType(unsigned Index) const {
+  return getAttributes(Index + FirstArgIndex).getInAllocaType();
 }
 
 MaybeAlign AttributeList::getStackAlignment(unsigned Index) const {
@@ -1611,6 +1669,14 @@ AttributeSet AttributeList::getAttributes(unsigned Index) const {
   return pImpl->begin()[Index];
 }
 
+bool AttributeList::hasParentContext(LLVMContext &C) const {
+  assert(!isEmpty() && "an empty attribute list has no parent context");
+  FoldingSetNodeID ID;
+  pImpl->Profile(ID);
+  void *Unused;
+  return C.pImpl->AttrsLists.FindNodeOrInsertPos(ID, Unused) == pImpl;
+}
+
 AttributeList::iterator AttributeList::begin() const {
   return pImpl ? pImpl->begin() : nullptr;
 }
@@ -1627,17 +1693,31 @@ unsigned AttributeList::getNumAttrSets() const {
   return pImpl ? pImpl->NumAttrSets : 0;
 }
 
-#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
-LLVM_DUMP_METHOD void AttributeList::dump() const {
-  dbgs() << "PAL[\n";
+void AttributeList::print(raw_ostream &O) const {
+  O << "AttributeList[\n";
 
   for (unsigned i = index_begin(), e = index_end(); i != e; ++i) {
-    if (getAttributes(i).hasAttributes())
-      dbgs() << "  { " << i << " => " << getAsString(i) << " }\n";
+    if (!getAttributes(i).hasAttributes())
+      continue;
+    O << "  { ";
+    switch (i) {
+    case AttrIndex::ReturnIndex:
+      O << "return";
+      break;
+    case AttrIndex::FunctionIndex:
+      O << "function";
+      break;
+    default:
+      O << "arg(" << i - AttrIndex::FirstArgIndex << ")";
+    }
+    O << " => " << getAsString(i) << " }\n";
   }
 
-  dbgs() << "]\n";
+  O << "]\n";
 }
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+LLVM_DUMP_METHOD void AttributeList::dump() const { print(dbgs()); }
 #endif
 
 //===----------------------------------------------------------------------===//
@@ -1699,6 +1779,9 @@ AttrBuilder &AttrBuilder::addAttribute(Attribute Attr) {
     AllocSizeArgs = Attr.getValueAsInt();
   else if (Kind == Attribute::VScaleRange)
     VScaleRangeArgs = Attr.getValueAsInt();
+  else if (Kind == Attribute::InAlloca)
+    InAllocaType = Attr.getValueAsType();
+
   return *this;
 }
 
@@ -1723,6 +1806,8 @@ AttrBuilder &AttrBuilder::removeAttribute(Attribute::AttrKind Val) {
     ByRefType = nullptr;
   else if (Val == Attribute::Preallocated)
     PreallocatedType = nullptr;
+  else if (Val == Attribute::InAlloca)
+    InAllocaType = nullptr;
   else if (Val == Attribute::Dereferenceable)
     DerefBytes = 0;
   else if (Val == Attribute::DereferenceableOrNull)
@@ -1852,6 +1937,12 @@ AttrBuilder &AttrBuilder::addPreallocatedAttr(Type *Ty) {
   return *this;
 }
 
+AttrBuilder &AttrBuilder::addInAllocaAttr(Type *Ty) {
+  Attrs[Attribute::InAlloca] = true;
+  InAllocaType = Ty;
+  return *this;
+}
+
 AttrBuilder &AttrBuilder::merge(const AttrBuilder &B) {
   // FIXME: What if both have alignments, but they don't match?!
   if (!Alignment)
@@ -1880,6 +1971,9 @@ AttrBuilder &AttrBuilder::merge(const AttrBuilder &B) {
 
   if (!PreallocatedType)
     PreallocatedType = B.PreallocatedType;
+
+  if (!InAllocaType)
+    InAllocaType = B.InAllocaType;
 
   if (!VScaleRangeArgs)
     VScaleRangeArgs = B.VScaleRangeArgs;
@@ -1920,6 +2014,9 @@ AttrBuilder &AttrBuilder::remove(const AttrBuilder &B) {
 
   if (B.PreallocatedType)
     PreallocatedType = nullptr;
+
+  if (B.InAllocaType)
+    InAllocaType = nullptr;
 
   if (B.VScaleRangeArgs)
     VScaleRangeArgs = 0;
@@ -1985,6 +2082,7 @@ bool AttrBuilder::operator==(const AttrBuilder &B) const {
          DerefBytes == B.DerefBytes && ByValType == B.ByValType &&
          StructRetType == B.StructRetType && ByRefType == B.ByRefType &&
          PreallocatedType == B.PreallocatedType &&
+         InAllocaType == B.InAllocaType &&
          VScaleRangeArgs == B.VScaleRangeArgs;
 }
 
@@ -2014,6 +2112,7 @@ AttrBuilder AttributeFuncs::typeIncompatible(Type *Ty) {
         .addAttribute(Attribute::ReadOnly)
         .addAttribute(Attribute::InAlloca)
         .addPreallocatedAttr(Ty)
+        .addInAllocaAttr(Ty)
         .addByValAttr(Ty)
         .addStructRetAttr(Ty)
         .addByRefAttr(Ty);

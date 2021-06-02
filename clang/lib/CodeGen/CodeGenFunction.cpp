@@ -35,6 +35,7 @@
 #include "clang/CodeGen/CGFunctionInfo.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/Analysis/OptimizationRemarkEmitter.h"
 #include "llvm/Frontend/OpenMP/OMPIRBuilder.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Dominators.h"
@@ -76,6 +77,7 @@ CodeGenFunction::CodeGenFunction(CodeGenModule &cgm, bool suppressNewContext)
           shouldEmitLifetimeMarkers(CGM.getCodeGenOpts(), CGM.getLangOpts())) {
   if (!suppressNewContext)
     CGM.getCXXABI().getMangleContext().startNewFunction();
+  EHStack.setCGF(this);
 
   SetFastMathFlags(CurFPFeatures);
   SetFPModel();
@@ -175,7 +177,7 @@ void CodeGenFunction::CGFPOptionsRAII::ConstructorHelper(FPOptions FPFeatures) {
 
   auto mergeFnAttrValue = [&](StringRef Name, bool Value) {
     auto OldValue =
-        CGF.CurFn->getFnAttribute(Name).getValueAsString() == "true";
+        CGF.CurFn->getFnAttribute(Name).getValueAsBool();
     auto NewValue = OldValue & Value;
     if (OldValue != NewValue)
       CGF.CurFn->addFnAttr(Name, llvm::toStringRef(NewValue));
@@ -494,8 +496,7 @@ void CodeGenFunction::FinishFunction(SourceLocation EndLoc) {
   // 4. Width of vector arguments and return types for this function.
   // 5. Width of vector aguments and return types for functions called by this
   //    function.
-  if (LargestVectorWidth)
-    CurFn->addFnAttr("min-legal-vector-width", llvm::utostr(LargestVectorWidth));
+  CurFn->addFnAttr("min-legal-vector-width", llvm::utostr(LargestVectorWidth));
 
   // Add vscale attribute if appropriate.
   if (getLangOpts().ArmSveVectorBits) {
@@ -592,7 +593,7 @@ CodeGenFunction::DecodeAddrUsedInPrologue(llvm::Value *F,
 void CodeGenFunction::EmitOpenCLKernelMetadata(const FunctionDecl *FD,
                                                llvm::Function *Fn)
 {
-  if (!FD->hasAttr<OpenCLKernelAttr>())
+  if (!FD->hasAttr<OpenCLKernelAttr>() && !FD->hasAttr<SYCLDeviceAttr>())
     return;
 
   // TODO Module identifier is not reliable for this purpose since two modules
@@ -602,7 +603,8 @@ void CodeGenFunction::EmitOpenCLKernelMetadata(const FunctionDecl *FD,
 
   llvm::LLVMContext &Context = getLLVMContext();
 
-  CGM.GenOpenCLArgMetadata(Fn, FD, this);
+  if (FD->hasAttr<OpenCLKernelAttr>())
+    CGM.GenOpenCLArgMetadata(Fn, FD, this);
 
   if (const VecTypeHintAttr *A = FD->getAttr<VecTypeHintAttr>()) {
     QualType HintQTy = A->getTypeHint();
@@ -621,9 +623,9 @@ void CodeGenFunction::EmitOpenCLKernelMetadata(const FunctionDecl *FD,
 
   if (const WorkGroupSizeHintAttr *A = FD->getAttr<WorkGroupSizeHintAttr>()) {
     llvm::Metadata *AttrMDArgs[] = {
-        llvm::ConstantAsMetadata::get(Builder.getInt32(A->getXDim())),
-        llvm::ConstantAsMetadata::get(Builder.getInt32(A->getYDim())),
-        llvm::ConstantAsMetadata::get(Builder.getInt32(A->getZDim()))};
+        llvm::ConstantAsMetadata::get(Builder.getInt(*A->getXDimVal())),
+        llvm::ConstantAsMetadata::get(Builder.getInt(*A->getYDimVal())),
+        llvm::ConstantAsMetadata::get(Builder.getInt(*A->getZDimVal()))};
     Fn->setMetadata("work_group_size_hint", llvm::MDNode::get(Context, AttrMDArgs));
   }
 
@@ -648,15 +650,51 @@ void CodeGenFunction::EmitOpenCLKernelMetadata(const FunctionDecl *FD,
                     llvm::MDNode::get(Context, AttrMDArgs));
   }
 
-  if (const IntelReqdSubGroupSizeAttr *A =
-          FD->getAttr<IntelReqdSubGroupSizeAttr>()) {
-    const auto *CE = dyn_cast<ConstantExpr>(A->getValue());
-    assert(CE && "Not an integer constant expression");
+  bool IsKernelOrDevice =
+      FD->hasAttr<SYCLKernelAttr>() || FD->hasAttr<SYCLDeviceAttr>();
+  const IntelReqdSubGroupSizeAttr *ReqSubGroup =
+      FD->getAttr<IntelReqdSubGroupSizeAttr>();
+
+  // To support the SYCL 2020 spelling with no propagation, only emit for
+  // kernel-or-device when that spelling, fall-back to old behavior.
+  if (ReqSubGroup && (IsKernelOrDevice || !ReqSubGroup->isSYCL2020Spelling())) {
+    const auto *CE = cast<ConstantExpr>(ReqSubGroup->getValue());
     Optional<llvm::APSInt> ArgVal = CE->getResultAsAPSInt();
     llvm::Metadata *AttrMDArgs[] = {llvm::ConstantAsMetadata::get(
         Builder.getInt32(ArgVal->getSExtValue()))};
     Fn->setMetadata("intel_reqd_sub_group_size",
                     llvm::MDNode::get(Context, AttrMDArgs));
+  } else if (IsKernelOrDevice &&
+             CGM.getLangOpts().getDefaultSubGroupSizeType() ==
+                 LangOptions::SubGroupSizeType::Integer) {
+    llvm::Metadata *AttrMDArgs[] = {llvm::ConstantAsMetadata::get(
+        Builder.getInt32(CGM.getLangOpts().DefaultSubGroupSize))};
+    Fn->setMetadata("intel_reqd_sub_group_size",
+                    llvm::MDNode::get(Context, AttrMDArgs));
+  }
+
+  // SCYL2020 doesn't propagate attributes, so don't put it in an intermediate
+  // location.
+  if (IsKernelOrDevice) {
+    if (const auto *A = FD->getAttr<IntelNamedSubGroupSizeAttr>()) {
+      llvm::Metadata *AttrMDArgs[] = {llvm::MDString::get(
+          Context, A->getType() == IntelNamedSubGroupSizeAttr::Primary
+                       ? "primary"
+                       : "automatic")};
+      Fn->setMetadata("intel_reqd_sub_group_size",
+                      llvm::MDNode::get(Context, AttrMDArgs));
+    } else if (CGM.getLangOpts().getDefaultSubGroupSizeType() ==
+               LangOptions::SubGroupSizeType::Auto) {
+      llvm::Metadata *AttrMDArgs[] = {
+          llvm::MDString::get(Context, "automatic")};
+      Fn->setMetadata("intel_reqd_sub_group_size",
+                      llvm::MDNode::get(Context, AttrMDArgs));
+    } else if (CGM.getLangOpts().getDefaultSubGroupSizeType() ==
+               LangOptions::SubGroupSizeType::Primary) {
+      llvm::Metadata *AttrMDArgs[] = {llvm::MDString::get(Context, "primary")};
+      Fn->setMetadata("intel_reqd_sub_group_size",
+                      llvm::MDNode::get(Context, AttrMDArgs));
+    }
   }
 
   if (FD->hasAttr<SYCLSimdAttr>()) {
@@ -667,10 +705,8 @@ void CodeGenFunction::EmitOpenCLKernelMetadata(const FunctionDecl *FD,
                     llvm::MDNode::get(Context, AttrMDArgs));
   }
 
-  if (const SYCLIntelNumSimdWorkItemsAttr *A =
-      FD->getAttr<SYCLIntelNumSimdWorkItemsAttr>()) {
-    const auto *CE = dyn_cast<ConstantExpr>(A->getValue());
-    assert(CE && "Not an integer constant expression");
+  if (const auto *A = FD->getAttr<SYCLIntelNumSimdWorkItemsAttr>()) {
+    const auto *CE = cast<ConstantExpr>(A->getValue());
     Optional<llvm::APSInt> ArgVal = CE->getResultAsAPSInt();
     llvm::Metadata *AttrMDArgs[] = {llvm::ConstantAsMetadata::get(
         Builder.getInt32(ArgVal->getSExtValue()))};
@@ -678,10 +714,8 @@ void CodeGenFunction::EmitOpenCLKernelMetadata(const FunctionDecl *FD,
                     llvm::MDNode::get(Context, AttrMDArgs));
   }
 
-  if (const SYCLIntelSchedulerTargetFmaxMhzAttr *A =
-          FD->getAttr<SYCLIntelSchedulerTargetFmaxMhzAttr>()) {
-    const auto *CE = dyn_cast<ConstantExpr>(A->getValue());
-    assert(CE && "Not an integer constant expression");
+  if (const auto *A = FD->getAttr<SYCLIntelSchedulerTargetFmaxMhzAttr>()) {
+    const auto *CE = cast<ConstantExpr>(A->getValue());
     Optional<llvm::APSInt> ArgVal = CE->getResultAsAPSInt();
     llvm::Metadata *AttrMDArgs[] = {llvm::ConstantAsMetadata::get(
         Builder.getInt32(ArgVal->getSExtValue()))};
@@ -689,10 +723,8 @@ void CodeGenFunction::EmitOpenCLKernelMetadata(const FunctionDecl *FD,
                     llvm::MDNode::get(Context, AttrMDArgs));
   }
 
-  if (const SYCLIntelMaxGlobalWorkDimAttr *A =
-      FD->getAttr<SYCLIntelMaxGlobalWorkDimAttr>()) {
-    const auto *CE = dyn_cast<ConstantExpr>(A->getValue());
-    assert(CE && "Not an integer constant expression");
+  if (const auto *A = FD->getAttr<SYCLIntelMaxGlobalWorkDimAttr>()) {
+    const auto *CE = cast<ConstantExpr>(A->getValue());
     Optional<llvm::APSInt> ArgVal = CE->getResultAsAPSInt();
     llvm::Metadata *AttrMDArgs[] = {llvm::ConstantAsMetadata::get(
         Builder.getInt32(ArgVal->getSExtValue()))};
@@ -722,12 +754,8 @@ void CodeGenFunction::EmitOpenCLKernelMetadata(const FunctionDecl *FD,
                     llvm::MDNode::get(Context, AttrMDArgs));
   }
 
-  if (const SYCLIntelNoGlobalWorkOffsetAttr *A =
-          FD->getAttr<SYCLIntelNoGlobalWorkOffsetAttr>()) {
-    const Expr *Arg = A->getValue();
-    assert(Arg && "Got an unexpected null argument");
-    const auto *CE = dyn_cast<ConstantExpr>(Arg);
-    assert(CE && "Not an integer constant expression");
+  if (const auto *A = FD->getAttr<SYCLIntelNoGlobalWorkOffsetAttr>()) {
+    const auto *CE = cast<ConstantExpr>(A->getValue());
     Optional<llvm::APSInt> ArgVal = CE->getResultAsAPSInt();
     if (ArgVal->getBoolValue())
       Fn->setMetadata("no_global_work_offset", llvm::MDNode::get(Context, {}));
@@ -1339,9 +1367,6 @@ void CodeGenFunction::StartFunction(GlobalDecl GD, QualType RetTy,
 
 void CodeGenFunction::EmitFunctionBody(const Stmt *Body) {
   incrementProfileCounter(Body);
-  if (CPlusPlusWithProgress())
-    FnIsMustProgress = true;
-
   if (const CompoundStmt *S = dyn_cast<CompoundStmt>(Body))
     EmitCompoundStmtWithoutScope(*S);
   else
@@ -1349,7 +1374,7 @@ void CodeGenFunction::EmitFunctionBody(const Stmt *Body) {
 
   // This is checked after emitting the function body so we know if there
   // are any permitted infinite loops.
-  if (FnIsMustProgress)
+  if (checkIfFunctionMustProgress())
     CurFn->addFnAttr(llvm::Attribute::MustProgress);
 }
 
@@ -1483,6 +1508,34 @@ void CodeGenFunction::GenerateCode(GlobalDecl GD, llvm::Function *Fn,
 
   // Emit the standard function prologue.
   StartFunction(GD, ResTy, Fn, FnInfo, Args, Loc, BodyRange.getBegin());
+
+  SyclOptReportHandler &OptReportHandler =
+      CGM.getDiags().getSYCLOptReportHandler();
+  if (OptReportHandler.HasOptReportInfo(FD)) {
+    llvm::OptimizationRemarkEmitter ORE(Fn);
+    for (auto ORI : llvm::enumerate(OptReportHandler.GetInfo(FD))) {
+      llvm::DiagnosticLocation DL =
+          SourceLocToDebugLoc(ORI.value().KernelArgLoc);
+      StringRef NameInDesc = ORI.value().KernelArgDescName;
+      StringRef ArgType = ORI.value().KernelArgType;
+      StringRef ArgDesc = ORI.value().KernelArgDesc;
+      unsigned ArgSize = ORI.value().KernelArgSize;
+      StringRef ArgDecomposedField = ORI.value().KernelArgDecomposedField;
+
+      llvm::OptimizationRemark Remark("sycl", "Region", DL,
+                                      &Fn->getEntryBlock());
+      Remark << "Arg " << llvm::ore::NV("Argument", ORI.index()) << ":"
+             << ArgDesc << NameInDesc << "  (" << ArgDecomposedField
+             << "Type:" << ArgType << ", "
+             << "Size: " << llvm::ore::NV("Argument", ArgSize) << ")";
+      ORE.emit(Remark);
+    }
+  }
+
+  // Save parameters for coroutine function.
+  if (Body && isa_and_nonnull<CoroutineBodyStmt>(Body))
+    for (const auto *ParamDecl : FD->parameters())
+      FnArgs.push_back(ParamDecl);
 
   // Generate the body of the function.
   PGO.assignRegionCounters(GD, CurFn);

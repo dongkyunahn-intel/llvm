@@ -3064,6 +3064,71 @@ TEST_P(ASTImporterOptionSpecificTestBase, ImportOfEquivalentField) {
   EXPECT_EQ(ToF1, ToF2);
 }
 
+TEST_P(ASTImporterOptionSpecificTestBase, ImportBitfields) {
+  Decl *FromTU = getTuDecl("struct A { unsigned x : 3; };", Lang_CXX03);
+  auto *FromF =
+      FirstDeclMatcher<FieldDecl>().match(FromTU, fieldDecl(hasName("x")));
+
+  ASSERT_TRUE(FromF->isBitField());
+  ASSERT_EQ(3u, FromF->getBitWidthValue(FromTU->getASTContext()));
+  auto *ToField = Import(FromF, Lang_CXX03);
+  auto *ToTU = ToField->getTranslationUnitDecl();
+
+  EXPECT_TRUE(ToField->isBitField());
+  EXPECT_EQ(3u, ToField->getBitWidthValue(ToTU->getASTContext()));
+
+  const auto *FromBT = FromF->getBitWidth()->getType()->getAs<BuiltinType>();
+  const auto *ToBT = ToField->getBitWidth()->getType()->getAs<BuiltinType>();
+  ASSERT_TRUE(FromBT);
+  ASSERT_EQ(BuiltinType::Int, FromBT->getKind());
+  EXPECT_TRUE(ToBT);
+  EXPECT_EQ(BuiltinType::Int, ToBT->getKind());
+}
+
+struct ImportBlock : ASTImporterOptionSpecificTestBase {};
+TEST_P(ImportBlock, ImportBlocksAreUnsupported) {
+  const auto *Code = R"(
+    void test_block__capture_null() {
+      int *p = 0;
+      ^(){
+        *p = 1;
+      }();
+    })";
+  Decl *FromTU = getTuDecl(Code, Lang_CXX03);
+  auto *FromBlock = FirstDeclMatcher<BlockDecl>().match(FromTU, blockDecl());
+  ASSERT_TRUE(FromBlock);
+
+  auto ToBlockOrError = importOrError(FromBlock, Lang_CXX03);
+
+  const auto ExpectUnsupportedConstructError = [](const ImportError &Error) {
+    EXPECT_EQ(ImportError::UnsupportedConstruct, Error.Error);
+  };
+  llvm::handleAllErrors(ToBlockOrError.takeError(),
+                        ExpectUnsupportedConstructError);
+}
+
+TEST_P(ASTImporterOptionSpecificTestBase, ImportParmVarDecl) {
+  const auto *Code = R"(
+    template <typename T> struct Wrapper {
+      Wrapper(T Value = {}) {}
+    };
+    template class Wrapper<int>;
+    )";
+  Decl *FromTU = getTuDecl(Code, Lang_CXX11);
+  auto *FromVar = FirstDeclMatcher<ParmVarDecl>().match(
+      FromTU, parmVarDecl(hasType(asString("int"))));
+  ASSERT_TRUE(FromVar);
+  ASSERT_TRUE(FromVar->hasUninstantiatedDefaultArg());
+  ASSERT_TRUE(FromVar->getUninstantiatedDefaultArg());
+
+  const auto *ToVar = Import(FromVar, Lang_CXX11);
+  EXPECT_TRUE(ToVar);
+  EXPECT_TRUE(ToVar->hasUninstantiatedDefaultArg());
+  EXPECT_TRUE(ToVar->getUninstantiatedDefaultArg());
+  EXPECT_NE(FromVar->getUninstantiatedDefaultArg(),
+            ToVar->getUninstantiatedDefaultArg());
+}
+
 TEST_P(ASTImporterOptionSpecificTestBase, ImportOfNonEquivalentField) {
   Decl *ToF1;
   {
@@ -5160,6 +5225,40 @@ TEST_P(ErrorHandlingTest, ErrorIsNotPropagatedFromMemberToNamespace) {
   EXPECT_TRUE(ImportedOK);
 }
 
+TEST_P(ErrorHandlingTest, ODRViolationWithinTypedefDecls) {
+  // Importing `z` should fail - instead of crashing - due to an ODR violation.
+  // The `bar::e` typedef sets it's DeclContext after the import is done.
+  // However, if the importation fails, it will be left as a nullptr.
+  // During the cleanup of the failed import, we should check whether the
+  // DeclContext is null or not - instead of dereferencing that unconditionally.
+  constexpr auto ToTUCode = R"(
+      namespace X {
+        struct bar {
+          int odr_violation;
+        };
+      })";
+  constexpr auto FromTUCode = R"(
+      namespace X {
+        enum b {};
+        struct bar {
+          typedef b e;
+          static e d;
+        };
+      }
+      int z = X::bar::d;
+      )";
+  Decl *ToTU = getToTuDecl(ToTUCode, Lang_CXX11);
+  static_cast<void>(ToTU);
+  Decl *FromTU = getTuDecl(FromTUCode, Lang_CXX11);
+  auto *FromZ =
+      FirstDeclMatcher<VarDecl>().match(FromTU, varDecl(hasName("z")));
+  ASSERT_TRUE(FromZ);
+  ASSERT_TRUE(FromZ->hasInit());
+
+  auto *ImportedZ = Import(FromZ, Lang_CXX11);
+  EXPECT_FALSE(ImportedZ);
+}
+
 // An error should be set for a class if it had a previous import with an error
 // from another TU.
 TEST_P(ErrorHandlingTest,
@@ -5503,15 +5602,15 @@ TEST_P(ASTImporterOptionSpecificTestBase,
   EXPECT_EQ(ImportedX->isAggregate(), FromX->isAggregate());
 }
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, SVEBuiltins,
-                        ::testing::Values(std::vector<std::string>{
-                            "-target", "aarch64-linux-gnu"}), );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, SVEBuiltins,
+                         ::testing::Values(std::vector<std::string>{
+                             "-target", "aarch64-linux-gnu"}));
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, DeclContextTest,
-                        ::testing::Values(std::vector<std::string>()), );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, DeclContextTest,
+                         ::testing::Values(std::vector<std::string>()));
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, CanonicalRedeclChain,
-                        ::testing::Values(std::vector<std::string>()), );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, CanonicalRedeclChain,
+                         ::testing::Values(std::vector<std::string>()));
 
 TEST_P(ASTImporterOptionSpecificTestBase, LambdasAreDifferentiated) {
   Decl *FromTU = getTuDecl(
@@ -6117,7 +6216,7 @@ TEST_P(CTAD, DeductionGuideShouldReferToANonLocalTypedef) {
   ParmVarDecl *Param = Guide->getParamDecl(0);
   // The type of the first param (which is a typedef) should match the typedef
   // in the global scope.
-  EXPECT_EQ(Param->getType()->getAs<TypedefType>()->getDecl(), Typedef);
+  EXPECT_EQ(Param->getType()->castAs<TypedefType>()->getDecl(), Typedef);
 }
 
 TEST_P(CTAD, DeductionGuideShouldReferToANonLocalTypedefInParamPtr) {
@@ -6158,11 +6257,11 @@ TEST_P(CTAD, DeductionGuideShouldCopyALocalTypedef) {
   auto *Typedef = FirstDeclMatcher<TypedefNameDecl>().match(
       TU, typedefNameDecl(hasName("U")));
   ParmVarDecl *Param = Guide->getParamDecl(0);
-  EXPECT_NE(Param->getType()->getAs<TypedefType>()->getDecl(), Typedef);
+  EXPECT_NE(Param->getType()->castAs<TypedefType>()->getDecl(), Typedef);
 }
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, CTAD,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, CTAD,
+                         DefaultTestValuesForRunOptions);
 
 TEST_P(ASTImporterOptionSpecificTestBase, TypedefWithAttribute) {
   Decl *TU = getTuDecl(
@@ -6236,74 +6335,101 @@ TEST_P(ASTImporterOptionSpecificTestBase, ImportOfCapturedVLAType) {
   EXPECT_NE(FromFD->getCapturedVLAType(), ToFD->getCapturedVLAType());
 }
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, ASTImporterLookupTableTest,
-                        DefaultTestValuesForRunOptions, );
+TEST_P(ASTImporterOptionSpecificTestBase, ImportEnumMemberSpecialization) {
+  Decl *FromTU = getTuDecl(
+      R"(
+      template <class T> struct A {
+        enum tagname { enumerator };
+      };
+      template struct A<int>;
+      )",
+      Lang_CXX03);
+  auto *FromD = FirstDeclMatcher<EnumDecl>().match(
+      FromTU, enumDecl(hasName("tagname"),
+                       hasParent(classTemplateSpecializationDecl())));
+  ASSERT_TRUE(FromD);
+  ASSERT_TRUE(FromD->getMemberSpecializationInfo());
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportPath,
-                        ::testing::Values(std::vector<std::string>()), );
+  auto *ToD = Import(FromD, Lang_CXX03);
+  EXPECT_TRUE(ToD);
+  EXPECT_TRUE(ToD->getMemberSpecializationInfo());
+  EXPECT_EQ(FromD->getTemplateSpecializationKind(),
+            ToD->getTemplateSpecializationKind());
+}
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportExpr,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ASTImporterLookupTableTest,
+                         DefaultTestValuesForRunOptions);
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportFixedPointExpr,
-                        ExtendWithOptions(DefaultTestArrayForRunOptions,
-                                          std::vector<std::string>{
-                                              "-ffixed-point"}), );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ImportPath,
+                         ::testing::Values(std::vector<std::string>()));
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportType,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ImportExpr,
+                         DefaultTestValuesForRunOptions);
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportDecl,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ImportFixedPointExpr,
+                         ExtendWithOptions(DefaultTestArrayForRunOptions,
+                                           std::vector<std::string>{
+                                               "-ffixed-point"}));
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, ASTImporterOptionSpecificTestBase,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ImportBlock,
+                         ExtendWithOptions(DefaultTestArrayForRunOptions,
+                                           std::vector<std::string>{
+                                               "-fblocks"}));
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, ErrorHandlingTest,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ImportType,
+                         DefaultTestValuesForRunOptions);
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, RedirectingImporterTest,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ImportDecl,
+                         DefaultTestValuesForRunOptions);
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportFunctions,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ASTImporterOptionSpecificTestBase,
+                         DefaultTestValuesForRunOptions);
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportAutoFunctions,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ErrorHandlingTest,
+                         DefaultTestValuesForRunOptions);
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportFunctionTemplates,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, RedirectingImporterTest,
+                         DefaultTestValuesForRunOptions);
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportFriendFunctionTemplates,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ImportFunctions,
+                         DefaultTestValuesForRunOptions);
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportClasses,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ImportAutoFunctions,
+                         DefaultTestValuesForRunOptions);
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportFriendFunctions,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ImportFunctionTemplates,
+                         DefaultTestValuesForRunOptions);
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportFriendClasses,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ImportFriendFunctionTemplates,
+                         DefaultTestValuesForRunOptions);
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests,
-                        ImportFunctionTemplateSpecializations,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ImportClasses,
+                         DefaultTestValuesForRunOptions);
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportImplicitMethods,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ImportFriendFunctions,
+                         DefaultTestValuesForRunOptions);
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportVariables,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ImportFriendClasses,
+                         DefaultTestValuesForRunOptions);
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, LLDBLookupTest,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests,
+                         ImportFunctionTemplateSpecializations,
+                         DefaultTestValuesForRunOptions);
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportSourceLocations,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ImportImplicitMethods,
+                         DefaultTestValuesForRunOptions);
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportWithExternalSource,
-                        DefaultTestValuesForRunOptions, );
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ImportVariables,
+                         DefaultTestValuesForRunOptions);
+
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, LLDBLookupTest,
+                         DefaultTestValuesForRunOptions);
+
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ImportSourceLocations,
+                         DefaultTestValuesForRunOptions);
+
+INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ImportWithExternalSource,
+                         DefaultTestValuesForRunOptions);
 
 } // end namespace ast_matchers
 } // end namespace clang

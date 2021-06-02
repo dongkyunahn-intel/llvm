@@ -258,10 +258,10 @@ inline bool isInRangeForImmS32(int64_t Value) {
 }
 
 /// Apply fixup expression for edge to block content.
-inline Error applyFixup(LinkGraph &G, Block &B, const Edge &E,
-                        char *BlockWorkingMem) {
+inline Error applyFixup(LinkGraph &G, Block &B, const Edge &E) {
   using namespace support;
 
+  char *BlockWorkingMem = B.getAlreadyMutableContent().data();
   char *FixupPtr = BlockWorkingMem + E.getOffset();
   JITTargetAddress FixupAddress = B.getAddress() + E.getOffset();
 
@@ -334,6 +334,65 @@ inline Error applyFixup(LinkGraph &G, Block &B, const Edge &E,
   }
 
   return Error::success();
+}
+
+/// x86_64 pointer size.
+constexpr uint64_t PointerSize = 8;
+
+/// x86-64 null pointer content.
+extern const char NullPointerContent[PointerSize];
+
+/// x86-64 pointer jump stub content.
+///
+/// Contains the instruction sequence for an indirect jump via an in-memory
+/// pointer:
+///   jmpq *ptr(%rip)
+extern const char PointerJumpStubContent[6];
+
+/// Creates a new pointer block in the given section and returns an anonymous
+/// symbol pointing to it.
+///
+/// If InitialTarget is given then an Pointer64 relocation will be added to the
+/// block pointing at InitialTarget.
+///
+/// The pointer block will have the following default values:
+///   alignment: 64-bit
+///   alignment-offset: 0
+///   address: highest allowable (~7U)
+inline Symbol &createAnonymousPointer(LinkGraph &G, Section &PointerSection,
+                                      Symbol *InitialTarget = nullptr,
+                                      uint64_t InitialAddend = 0) {
+  auto &B =
+      G.createContentBlock(PointerSection, NullPointerContent, ~7ULL, 8, 0);
+  if (InitialTarget)
+    B.addEdge(Pointer64, 0, *InitialTarget, InitialAddend);
+  return G.addAnonymousSymbol(B, 0, 8, false, false);
+}
+
+/// Create a jump stub block that jumps via the pointer at the given symbol.
+///
+/// The stub block will have the following default values:
+///   alignment: 8-bit
+///   alignment-offset: 0
+///   address: highest allowable: (~5U)
+inline Block &createPointerJumpStubBlock(LinkGraph &G, Section &StubSection,
+                                         Symbol &PointerSymbol) {
+  auto &B =
+      G.createContentBlock(StubSection, PointerJumpStubContent, ~5ULL, 1, 0);
+  B.addEdge(Delta32, 2, PointerSymbol, -4);
+  return B;
+}
+
+/// Create a jump stub that jumps via the pointer at the given symbol and
+/// an anonymous symbol pointing to it. Return the anonymous symbol.
+///
+/// The stub block will be created by createPointerJumpStubBlock.
+inline Symbol &createAnonymousPointerJumpStub(LinkGraph &G,
+                                              Section &StubSection,
+                                              Symbol &PointerSymbol) {
+  return G.addAnonymousSymbol(
+      createPointerJumpStubBlock(G, StubSection, PointerSymbol), 0, 6, true,
+      false);
 }
 
 } // namespace x86_64

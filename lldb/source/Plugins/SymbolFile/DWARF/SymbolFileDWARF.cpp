@@ -1651,6 +1651,13 @@ SymbolFileDWARF::GetDwoSymbolFileForCompileUnit(
       return nullptr;
 
     dwo_file.SetFile(comp_dir, FileSpec::Style::native);
+    if (dwo_file.IsRelative()) {
+      // if DW_AT_comp_dir is relative, it should be relative to the location
+      // of the executable, not to the location from which the debugger was
+      // launched.
+      dwo_file.PrependPathComponent(
+          m_objfile_sp->GetFileSpec().GetDirectory().GetStringRef());
+    }
     FileSystem::Instance().Resolve(dwo_file);
     dwo_file.AppendPathComponent(dwo_name);
   }
@@ -1862,17 +1869,8 @@ uint32_t SymbolFileDWARF::ResolveSymbolContext(const Address &so_addr,
     lldb::addr_t file_vm_addr = so_addr.GetFileAddress();
 
     DWARFDebugInfo &debug_info = DebugInfo();
-    llvm::Expected<DWARFDebugAranges &> aranges =
-        debug_info.GetCompileUnitAranges();
-    if (!aranges) {
-      Log *log = LogChannelDWARF::GetLogIfAll(DWARF_LOG_DEBUG_INFO);
-      LLDB_LOG_ERROR(log, aranges.takeError(),
-                     "SymbolFileDWARF::ResolveSymbolContext failed to get cu "
-                     "aranges.  {0}");
-      return 0;
-    }
-
-    const dw_offset_t cu_offset = aranges->FindAddress(file_vm_addr);
+    const DWARFDebugAranges &aranges = debug_info.GetCompileUnitAranges();
+    const dw_offset_t cu_offset = aranges.FindAddress(file_vm_addr);
     if (cu_offset == DW_INVALID_OFFSET) {
       // Global variables are not in the compile unit address ranges. The only
       // way to currently find global variables is to iterate over the
@@ -1961,12 +1959,11 @@ uint32_t SymbolFileDWARF::ResolveSymbolContext(const Address &so_addr,
   return resolved;
 }
 
-uint32_t SymbolFileDWARF::ResolveSymbolContext(const FileSpec &file_spec,
-                                               uint32_t line,
-                                               bool check_inlines,
-                                               SymbolContextItem resolve_scope,
-                                               SymbolContextList &sc_list) {
+uint32_t SymbolFileDWARF::ResolveSymbolContext(
+    const SourceLocationSpec &src_location_spec,
+    SymbolContextItem resolve_scope, SymbolContextList &sc_list) {
   std::lock_guard<std::recursive_mutex> guard(GetModuleMutex());
+  const bool check_inlines = src_location_spec.GetCheckInlines();
   const uint32_t prev_size = sc_list.GetSize();
   if (resolve_scope & eSymbolContextCompUnit) {
     for (uint32_t cu_idx = 0, num_cus = GetNumCompileUnits(); cu_idx < num_cus;
@@ -1975,11 +1972,10 @@ uint32_t SymbolFileDWARF::ResolveSymbolContext(const FileSpec &file_spec,
       if (!dc_cu)
         continue;
 
-      bool file_spec_matches_cu_file_spec =
-          FileSpec::Match(file_spec, dc_cu->GetPrimaryFile());
+      bool file_spec_matches_cu_file_spec = FileSpec::Match(
+          src_location_spec.GetFileSpec(), dc_cu->GetPrimaryFile());
       if (check_inlines || file_spec_matches_cu_file_spec) {
-        dc_cu->ResolveSymbolContext(file_spec, line, check_inlines, false,
-                                    resolve_scope, sc_list);
+        dc_cu->ResolveSymbolContext(src_location_spec, resolve_scope, sc_list);
         if (!check_inlines)
           break;
       }

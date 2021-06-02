@@ -80,7 +80,7 @@ def InaccessibleMemOnly : EnumAttr<"inaccessiblememonly">;
 def InaccessibleMemOrArgMemOnly : EnumAttr<"inaccessiblemem_or_argmemonly">;
 
 /// Pass structure in an alloca.
-def InAlloca : EnumAttr<"inalloca">;
+def InAlloca : TypeAttr<"inalloca">;
 
 /// Source said inlining was desirable.
 def InlineHint : EnumAttr<"inlinehint">;
@@ -243,6 +243,9 @@ def SwiftError : EnumAttr<"swifterror">;
 
 /// Argument is swift self/context.
 def SwiftSelf : EnumAttr<"swiftself">;
+
+/// Argument is swift async context.
+def SwiftAsync : EnumAttr<"swiftasync">;
 
 /// Function must be in a unwind table.
 def UWTable : EnumAttr<"uwtable">;

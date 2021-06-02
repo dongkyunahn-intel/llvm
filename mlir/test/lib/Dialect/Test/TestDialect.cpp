@@ -748,9 +748,29 @@ LogicalResult OpWithShapedTypeInferTypeInterfaceOp::inferReturnTypeComponents(
 }
 
 LogicalResult OpWithShapedTypeInferTypeInterfaceOp::reifyReturnTypeShapes(
-    OpBuilder &builder, llvm::SmallVectorImpl<Value> &shapes) {
+    OpBuilder &builder, ValueRange operands,
+    llvm::SmallVectorImpl<Value> &shapes) {
   shapes = SmallVector<Value, 1>{
-      builder.createOrFold<memref::DimOp>(getLoc(), getOperand(0), 0)};
+      builder.createOrFold<memref::DimOp>(getLoc(), operands.front(), 0)};
+  return success();
+}
+
+LogicalResult
+OpWithResultShapePerDimInterfaceOp ::reifyReturnTypeShapesPerResultDim(
+    OpBuilder &builder,
+    llvm::SmallVectorImpl<llvm::SmallVector<Value>> &shapes) {
+  SmallVector<Value> operand1Shape, operand2Shape;
+  Location loc = getLoc();
+  for (auto i :
+       llvm::seq<int>(0, operand1().getType().cast<ShapedType>().getRank())) {
+    operand1Shape.push_back(builder.create<memref::DimOp>(loc, operand1(), i));
+  }
+  for (auto i :
+       llvm::seq<int>(0, operand2().getType().cast<ShapedType>().getRank())) {
+    operand2Shape.push_back(builder.create<memref::DimOp>(loc, operand2(), i));
+  }
+  shapes.emplace_back(std::move(operand2Shape));
+  shapes.emplace_back(std::move(operand1Shape));
   return success();
 }
 

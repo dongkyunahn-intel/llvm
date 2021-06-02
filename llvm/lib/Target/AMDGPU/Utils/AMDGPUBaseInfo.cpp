@@ -155,6 +155,34 @@ int getMaskedMIMGOp(unsigned Opc, unsigned NewChannels) {
   return NewInfo ? NewInfo->Opcode : -1;
 }
 
+unsigned getAddrSizeMIMGOp(const MIMGBaseOpcodeInfo *BaseOpcode,
+                           const MIMGDimInfo *Dim, bool IsA16,
+                           bool IsG16Supported) {
+  unsigned AddrWords = BaseOpcode->NumExtraArgs;
+  unsigned AddrComponents = (BaseOpcode->Coordinates ? Dim->NumCoords : 0) +
+                            (BaseOpcode->LodOrClampOrMip ? 1 : 0);
+  if (IsA16)
+    AddrWords += divideCeil(AddrComponents, 2);
+  else
+    AddrWords += AddrComponents;
+
+  // Note: For subtargets that support A16 but not G16, enabling A16 also
+  // enables 16 bit gradients.
+  // For subtargets that support A16 (operand) and G16 (done with a different
+  // instruction encoding), they are independent.
+
+  if (BaseOpcode->Gradients) {
+    if ((IsA16 && !IsG16Supported) || BaseOpcode->G16)
+      // There are two gradients per coordinate, we pack them separately.
+      // For the 3d case,
+      // we get (dy/du, dx/du) (-, dz/du) (dy/dv, dx/dv) (-, dz/dv)
+      AddrWords += alignTo<2>(Dim->NumGradients / 2);
+    else
+      AddrWords += Dim->NumGradients;
+  }
+  return AddrWords;
+}
+
 struct MUBUFInfo {
   uint16_t Opcode;
   uint16_t BaseOpcode;
@@ -162,6 +190,7 @@ struct MUBUFInfo {
   bool has_vaddr;
   bool has_srsrc;
   bool has_soffset;
+  bool IsBufferInv;
 };
 
 struct MTBUFInfo {
@@ -178,12 +207,23 @@ struct SMInfo {
   bool IsBuffer;
 };
 
+struct VOPInfo {
+  uint16_t Opcode;
+  bool IsSingle;
+};
+
 #define GET_MTBUFInfoTable_DECL
 #define GET_MTBUFInfoTable_IMPL
 #define GET_MUBUFInfoTable_DECL
 #define GET_MUBUFInfoTable_IMPL
 #define GET_SMInfoTable_DECL
 #define GET_SMInfoTable_IMPL
+#define GET_VOP1InfoTable_DECL
+#define GET_VOP1InfoTable_IMPL
+#define GET_VOP2InfoTable_DECL
+#define GET_VOP2InfoTable_IMPL
+#define GET_VOP3InfoTable_DECL
+#define GET_VOP3InfoTable_IMPL
 #include "AMDGPUGenSearchableTables.inc"
 
 int getMTBUFBaseOpcode(unsigned Opc) {
@@ -246,9 +286,29 @@ bool getMUBUFHasSoffset(unsigned Opc) {
   return Info ? Info->has_soffset : false;
 }
 
+bool getMUBUFIsBufferInv(unsigned Opc) {
+  const MUBUFInfo *Info = getMUBUFOpcodeHelper(Opc);
+  return Info ? Info->IsBufferInv : false;
+}
+
 bool getSMEMIsBuffer(unsigned Opc) {
   const SMInfo *Info = getSMEMOpcodeHelper(Opc);
   return Info ? Info->IsBuffer : false;
+}
+
+bool getVOP1IsSingle(unsigned Opc) {
+  const VOPInfo *Info = getVOP1OpcodeHelper(Opc);
+  return Info ? Info->IsSingle : false;
+}
+
+bool getVOP2IsSingle(unsigned Opc) {
+  const VOPInfo *Info = getVOP2OpcodeHelper(Opc);
+  return Info ? Info->IsSingle : false;
+}
+
+bool getVOP3IsSingle(unsigned Opc) {
+  const VOPInfo *Info = getVOP3OpcodeHelper(Opc);
+  return Info ? Info->IsSingle : false;
 }
 
 // Wrapper for Tablegen'd function.  enum Subtarget is not defined in any
@@ -412,6 +472,11 @@ std::string AMDGPUTargetID::toString() const {
       } else if (Processor == "gfx906") {
         if (isXnackOnOrAny())
           Processor = "gfx907";
+      } else if (Processor == "gfx90c") {
+        if (isXnackOnOrAny())
+          report_fatal_error(
+              "AMD GPU code object V2 does not support processor " + Processor +
+              " with XNACK being ON or ANY");
       } else {
         report_fatal_error(
             "AMD GPU code object V2 does not support processor " + Processor);
@@ -1392,6 +1457,10 @@ bool hasGFX10_3Insts(const MCSubtargetInfo &STI) {
 
 bool isGFX90A(const MCSubtargetInfo &STI) {
   return STI.getFeatureBits()[AMDGPU::FeatureGFX90AInsts];
+}
+
+bool hasArchitectedFlatScratch(const MCSubtargetInfo &STI) {
+  return STI.getFeatureBits()[AMDGPU::FeatureArchitectedFlatScratch];
 }
 
 bool isSGPR(unsigned Reg, const MCRegisterInfo* TRI) {

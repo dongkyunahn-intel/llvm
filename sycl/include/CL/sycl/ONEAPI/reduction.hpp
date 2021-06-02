@@ -12,8 +12,10 @@
 #include <CL/sycl/ONEAPI/group_algorithm.hpp>
 #include <CL/sycl/accessor.hpp>
 #include <CL/sycl/atomic.hpp>
+#include <CL/sycl/detail/tuple.hpp>
 #include <CL/sycl/handler.hpp>
 #include <CL/sycl/kernel.hpp>
+#include <CL/sycl/known_identity.hpp>
 
 #include <tuple>
 
@@ -30,183 +32,23 @@ using cl::sycl::detail::is_sgeninteger;
 using cl::sycl::detail::queue_impl;
 using cl::sycl::detail::remove_AS;
 
+// std::tuple seems to be a) too heavy and b) not copyable to device now
+// Thus sycl::detail::tuple is used instead.
+// Switching from sycl::device::tuple to std::tuple can be done by re-defining
+// the ReduTupleT type and makeReduTupleT() function below.
+template <typename... Ts> using ReduTupleT = sycl::detail::tuple<Ts...>;
+template <typename... Ts> ReduTupleT<Ts...> makeReduTupleT(Ts... Elements) {
+  return sycl::detail::make_tuple(Elements...);
+}
+
 __SYCL_EXPORT size_t reduGetMaxWGSize(shared_ptr_class<queue_impl> Queue,
                                       size_t LocalMemBytesPerWorkItem);
 __SYCL_EXPORT size_t reduComputeWGSize(size_t NWorkItems, size_t MaxWGSize,
                                        size_t &NWorkGroups);
 
-template <typename T, class BinaryOperation>
-using IsReduPlus =
-    bool_constant<std::is_same<BinaryOperation, ONEAPI::plus<T>>::value ||
-                  std::is_same<BinaryOperation, ONEAPI::plus<void>>::value>;
 
-template <typename T, class BinaryOperation>
-using IsReduMultiplies =
-    bool_constant<std::is_same<BinaryOperation, std::multiplies<T>>::value ||
-                  std::is_same<BinaryOperation, std::multiplies<void>>::value>;
 
-template <typename T, class BinaryOperation>
-using IsReduMinimum =
-    bool_constant<std::is_same<BinaryOperation, ONEAPI::minimum<T>>::value ||
-                  std::is_same<BinaryOperation, ONEAPI::minimum<void>>::value>;
 
-template <typename T, class BinaryOperation>
-using IsReduMaximum =
-    bool_constant<std::is_same<BinaryOperation, ONEAPI::maximum<T>>::value ||
-                  std::is_same<BinaryOperation, ONEAPI::maximum<void>>::value>;
-
-template <typename T, class BinaryOperation>
-using IsReduBitOR =
-    bool_constant<std::is_same<BinaryOperation, ONEAPI::bit_or<T>>::value ||
-                  std::is_same<BinaryOperation, ONEAPI::bit_or<void>>::value>;
-
-template <typename T, class BinaryOperation>
-using IsReduBitXOR =
-    bool_constant<std::is_same<BinaryOperation, ONEAPI::bit_xor<T>>::value ||
-                  std::is_same<BinaryOperation, ONEAPI::bit_xor<void>>::value>;
-
-template <typename T, class BinaryOperation>
-using IsReduBitAND =
-    bool_constant<std::is_same<BinaryOperation, ONEAPI::bit_and<T>>::value ||
-                  std::is_same<BinaryOperation, ONEAPI::bit_and<void>>::value>;
-
-template <typename T, class BinaryOperation>
-using IsReduOptForFastAtomicFetch =
-    bool_constant<is_sgeninteger<T>::value &&
-                  sycl::detail::IsValidAtomicType<T>::value &&
-                  (IsReduPlus<T, BinaryOperation>::value ||
-                   IsReduMinimum<T, BinaryOperation>::value ||
-                   IsReduMaximum<T, BinaryOperation>::value ||
-                   IsReduBitOR<T, BinaryOperation>::value ||
-                   IsReduBitXOR<T, BinaryOperation>::value ||
-                   IsReduBitAND<T, BinaryOperation>::value)>;
-
-template <typename T, class BinaryOperation>
-using IsReduOptForFastReduce =
-    bool_constant<((is_sgeninteger<T>::value &&
-                    (sizeof(T) == 32 || sizeof(T) == 64)) ||
-                   is_sgenfloat<T>::value) &&
-                  (IsReduPlus<T, BinaryOperation>::value ||
-                   IsReduMinimum<T, BinaryOperation>::value ||
-                   IsReduMaximum<T, BinaryOperation>::value)>;
-
-// Identity = 0
-template <typename T, class BinaryOperation>
-using IsZeroIdentityOp = bool_constant<
-    (is_sgeninteger<T>::value && (IsReduPlus<T, BinaryOperation>::value ||
-                                  IsReduBitOR<T, BinaryOperation>::value ||
-                                  IsReduBitXOR<T, BinaryOperation>::value)) ||
-    (is_sgenfloat<T>::value && IsReduPlus<T, BinaryOperation>::value)>;
-
-// Identity = 1
-template <typename T, class BinaryOperation>
-using IsOneIdentityOp =
-    bool_constant<(is_sgeninteger<T>::value || is_sgenfloat<T>::value) &&
-                  IsReduMultiplies<T, BinaryOperation>::value>;
-
-// Identity = ~0
-template <typename T, class BinaryOperation>
-using IsOnesIdentityOp = bool_constant<is_sgeninteger<T>::value &&
-                                       IsReduBitAND<T, BinaryOperation>::value>;
-
-// Identity = <max possible value>
-template <typename T, class BinaryOperation>
-using IsMinimumIdentityOp =
-    bool_constant<(is_sgeninteger<T>::value || is_sgenfloat<T>::value) &&
-                  IsReduMinimum<T, BinaryOperation>::value>;
-
-// Identity = <min possible value>
-template <typename T, class BinaryOperation>
-using IsMaximumIdentityOp =
-    bool_constant<(is_sgeninteger<T>::value || is_sgenfloat<T>::value) &&
-                  IsReduMaximum<T, BinaryOperation>::value>;
-
-template <typename T, class BinaryOperation>
-using IsKnownIdentityOp =
-    bool_constant<IsZeroIdentityOp<T, BinaryOperation>::value ||
-                  IsOneIdentityOp<T, BinaryOperation>::value ||
-                  IsOnesIdentityOp<T, BinaryOperation>::value ||
-                  IsMinimumIdentityOp<T, BinaryOperation>::value ||
-                  IsMaximumIdentityOp<T, BinaryOperation>::value>;
-
-template <typename BinaryOperation, typename AccumulatorT>
-struct has_known_identity_impl
-    : std::integral_constant<
-          bool, IsKnownIdentityOp<AccumulatorT, BinaryOperation>::value> {};
-
-template <typename BinaryOperation, typename AccumulatorT, typename = void>
-struct known_identity_impl {};
-
-/// Returns zero as identity for ADD, OR, XOR operations.
-template <typename BinaryOperation, typename AccumulatorT>
-struct known_identity_impl<BinaryOperation, AccumulatorT,
-                           typename std::enable_if<IsZeroIdentityOp<
-                               AccumulatorT, BinaryOperation>::value>::type> {
-  static constexpr AccumulatorT value = 0;
-};
-
-template <typename BinaryOperation>
-struct known_identity_impl<BinaryOperation, half,
-                           typename std::enable_if<IsZeroIdentityOp<
-                               half, BinaryOperation>::value>::type> {
-  static constexpr half value =
-#ifdef __SYCL_DEVICE_ONLY__
-      0;
-#else
-      cl::sycl::detail::host_half_impl::half(static_cast<uint16_t>(0));
-#endif
-};
-
-/// Returns one as identify for MULTIPLY operations.
-template <typename BinaryOperation, typename AccumulatorT>
-struct known_identity_impl<BinaryOperation, AccumulatorT,
-                           typename std::enable_if<IsOneIdentityOp<
-                               AccumulatorT, BinaryOperation>::value>::type> {
-  static constexpr AccumulatorT value = 1;
-};
-
-template <typename BinaryOperation>
-struct known_identity_impl<BinaryOperation, half,
-                           typename std::enable_if<IsOneIdentityOp<
-                               half, BinaryOperation>::value>::type> {
-  static constexpr half value =
-#ifdef __SYCL_DEVICE_ONLY__
-      1;
-#else
-      cl::sycl::detail::host_half_impl::half(static_cast<uint16_t>(0x3C00));
-#endif
-};
-
-/// Returns bit image consisting of all ones as identity for AND operations.
-template <typename BinaryOperation, typename AccumulatorT>
-struct known_identity_impl<BinaryOperation, AccumulatorT,
-                           typename std::enable_if<IsOnesIdentityOp<
-                               AccumulatorT, BinaryOperation>::value>::type> {
-  static constexpr AccumulatorT value = ~static_cast<AccumulatorT>(0);
-};
-
-/// Returns maximal possible value as identity for MIN operations.
-template <typename BinaryOperation, typename AccumulatorT>
-struct known_identity_impl<BinaryOperation, AccumulatorT,
-                           typename std::enable_if<IsMinimumIdentityOp<
-                               AccumulatorT, BinaryOperation>::value>::type> {
-  static constexpr AccumulatorT value =
-      std::numeric_limits<AccumulatorT>::has_infinity
-          ? std::numeric_limits<AccumulatorT>::infinity()
-          : (std::numeric_limits<AccumulatorT>::max)();
-};
-
-/// Returns minimal possible value as identity for MAX operations.
-template <typename BinaryOperation, typename AccumulatorT>
-struct known_identity_impl<BinaryOperation, AccumulatorT,
-                           typename std::enable_if<IsMaximumIdentityOp<
-                               AccumulatorT, BinaryOperation>::value>::type> {
-  static constexpr AccumulatorT value =
-      std::numeric_limits<AccumulatorT>::has_infinity
-          ? static_cast<AccumulatorT>(
-                -std::numeric_limits<AccumulatorT>::infinity())
-          : std::numeric_limits<AccumulatorT>::lowest();
-};
 
 /// Class that is used to represent objects that are passed to user's lambda
 /// functions and representing users' reduction variable.
@@ -498,30 +340,24 @@ public:
   }
 
   /// Constructs reduction_impl when the identity value is statically known.
-  // Note that aliasing constructor was used to initialize MRWAcc to avoid
-  // destruction of the object referenced by the parameter Acc.
   template <
       typename _T = T,
       enable_if_t<IsKnownIdentityOp<_T, BinaryOperation>::value> * = nullptr>
   reduction_impl(rw_accessor_type &Acc)
-      : MRWAcc(shared_ptr_class<rw_accessor_type>(
-            shared_ptr_class<rw_accessor_type>{}, &Acc)),
-        MIdentity(getIdentity()), InitializeToIdentity(false) {
+      : MRWAcc(new rw_accessor_type(Acc)), MIdentity(getIdentity()),
+        InitializeToIdentity(false) {
     if (Acc.get_count() != 1)
       throw sycl::runtime_error("Reduction variable must be a scalar.",
                                 PI_INVALID_VALUE);
   }
 
   /// Constructs reduction_impl when the identity value is statically known.
-  // Note that aliasing constructor was used to initialize MDWAcc to avoid
-  // destruction of the object referenced by the parameter Acc.
   template <
       typename _T = T,
       enable_if_t<IsKnownIdentityOp<_T, BinaryOperation>::value> * = nullptr>
   reduction_impl(dw_accessor_type &Acc)
-      : MDWAcc(shared_ptr_class<dw_accessor_type>(
-            shared_ptr_class<dw_accessor_type>{}, &Acc)),
-        MIdentity(getIdentity()), InitializeToIdentity(true) {
+      : MDWAcc(new dw_accessor_type(Acc)), MIdentity(getIdentity()),
+        InitializeToIdentity(true) {
     if (Acc.get_count() != 1)
       throw sycl::runtime_error("Reduction variable must be a scalar.",
                                 PI_INVALID_VALUE);
@@ -557,15 +393,12 @@ public:
 
   /// Constructs reduction_impl when the identity value is statically known,
   /// and user still passed the identity value.
-  // Note that aliasing constructor was used to initialize MRWAcc to avoid
-  // destruction of the object referenced by the parameter Acc.
   template <
       typename _T = T,
       enable_if_t<IsKnownIdentityOp<_T, BinaryOperation>::value> * = nullptr>
   reduction_impl(rw_accessor_type &Acc, const T & /*Identity*/, BinaryOperation)
-      : MRWAcc(shared_ptr_class<rw_accessor_type>(
-            shared_ptr_class<rw_accessor_type>{}, &Acc)),
-        MIdentity(getIdentity()), InitializeToIdentity(false) {
+      : MRWAcc(new rw_accessor_type(Acc)), MIdentity(getIdentity()),
+        InitializeToIdentity(false) {
     if (Acc.get_count() != 1)
       throw sycl::runtime_error("Reduction variable must be a scalar.",
                                 PI_INVALID_VALUE);
@@ -582,13 +415,14 @@ public:
     // list of known operations does not break the existing programs.
   }
 
+  /// Constructs reduction_impl when the identity value is statically known,
+  /// and user still passed the identity value.
   template <
       typename _T = T,
       enable_if_t<IsKnownIdentityOp<_T, BinaryOperation>::value> * = nullptr>
   reduction_impl(dw_accessor_type &Acc, const T & /*Identity*/, BinaryOperation)
-      : MDWAcc(shared_ptr_class<dw_accessor_type>(
-            shared_ptr_class<dw_accessor_type>{}, &Acc)),
-        MIdentity(getIdentity()), InitializeToIdentity(true) {
+      : MDWAcc(new dw_accessor_type(Acc)), MIdentity(getIdentity()),
+        InitializeToIdentity(true) {
     if (Acc.get_count() != 1)
       throw sycl::runtime_error("Reduction variable must be a scalar.",
                                 PI_INVALID_VALUE);
@@ -622,30 +456,24 @@ public:
   }
 
   /// Constructs reduction_impl when the identity value is unknown.
-  // Note that aliasing constructor was used to initialize MRWAcc to avoid
-  // destruction of the object referenced by the parameter Acc.
   template <
       typename _T = T,
       enable_if_t<!IsKnownIdentityOp<_T, BinaryOperation>::value> * = nullptr>
   reduction_impl(rw_accessor_type &Acc, const T &Identity, BinaryOperation BOp)
-      : MRWAcc(shared_ptr_class<rw_accessor_type>(
-            shared_ptr_class<rw_accessor_type>{}, &Acc)),
-        MIdentity(Identity), MBinaryOp(BOp), InitializeToIdentity(false) {
+      : MRWAcc(new rw_accessor_type(Acc)), MIdentity(Identity), MBinaryOp(BOp),
+        InitializeToIdentity(false) {
     if (Acc.get_count() != 1)
       throw sycl::runtime_error("Reduction variable must be a scalar.",
                                 PI_INVALID_VALUE);
   }
 
   /// Constructs reduction_impl when the identity value is unknown.
-  // Note that aliasing constructor was used to initialize MDWAcc to avoid
-  // destruction of the object referenced by the parameter Acc.
   template <
       typename _T = T,
       enable_if_t<!IsKnownIdentityOp<_T, BinaryOperation>::value> * = nullptr>
   reduction_impl(dw_accessor_type &Acc, const T &Identity, BinaryOperation BOp)
-      : MDWAcc(shared_ptr_class<dw_accessor_type>(
-            shared_ptr_class<dw_accessor_type>{}, &Acc)),
-        MIdentity(Identity), MBinaryOp(BOp), InitializeToIdentity(true) {
+      : MDWAcc(new dw_accessor_type(Acc)), MIdentity(Identity), MBinaryOp(BOp),
+        InitializeToIdentity(true) {
     if (Acc.get_count() != 1)
       throw sycl::runtime_error("Reduction variable must be a scalar.",
                                 PI_INVALID_VALUE);
@@ -1290,7 +1118,7 @@ reduSaveFinalResultToUserMem(handler &CGH, Reduction &Redu) {
 template <typename... Reductions, size_t... Is>
 auto createReduLocalAccs(size_t Size, handler &CGH,
                          std::index_sequence<Is...>) {
-  return std::make_tuple(
+  return makeReduTupleT(
       std::tuple_element_t<Is, std::tuple<Reductions...>>::getReadWriteLocalAcc(
           Size, CGH)...);
 }
@@ -1302,7 +1130,7 @@ template <bool IsOneWG, typename... Reductions, size_t... Is>
 auto createReduOutAccs(size_t NWorkGroups, handler &CGH,
                        std::tuple<Reductions...> &ReduTuple,
                        std::index_sequence<Is...>) {
-  return std::make_tuple(
+  return makeReduTupleT(
       std::get<Is>(ReduTuple).template getWriteMemForPartialReds<IsOneWG>(
           NWorkGroups, CGH)...);
 }
@@ -1314,19 +1142,19 @@ template <typename... Reductions, size_t... Is>
 auto getReadAccsToPreviousPartialReds(handler &CGH,
                                       std::tuple<Reductions...> &ReduTuple,
                                       std::index_sequence<Is...>) {
-  return std::make_tuple(
+  return makeReduTupleT(
       std::get<Is>(ReduTuple).getReadAccToPreviousPartialReds(CGH)...);
 }
 
 template <typename... Reductions, size_t... Is>
-std::tuple<typename Reductions::result_type...>
+ReduTupleT<typename Reductions::result_type...>
 getReduIdentities(std::tuple<Reductions...> &ReduTuple,
                   std::index_sequence<Is...>) {
   return {std::get<Is>(ReduTuple).getIdentity()...};
 }
 
 template <typename... Reductions, size_t... Is>
-std::tuple<typename Reductions::binary_operation...>
+ReduTupleT<typename Reductions::binary_operation...>
 getReduBOPs(std::tuple<Reductions...> &ReduTuple, std::index_sequence<Is...>) {
   return {std::get<Is>(ReduTuple).getBinaryOperation()...};
 }
@@ -1340,8 +1168,8 @@ getInitToIdentityProperties(std::tuple<Reductions...> &ReduTuple,
 
 template <typename... Reductions, size_t... Is>
 std::tuple<typename Reductions::reducer_type...>
-createReducers(std::tuple<typename Reductions::result_type...> Identities,
-               std::tuple<typename Reductions::binary_operation...> BOPsTuple,
+createReducers(ReduTupleT<typename Reductions::result_type...> Identities,
+               ReduTupleT<typename Reductions::binary_operation...> BOPsTuple,
                std::index_sequence<Is...>) {
   return {typename Reductions::reducer_type{std::get<Is>(Identities),
                                             std::get<Is>(BOPsTuple)}...};
@@ -1357,9 +1185,9 @@ void callReduUserKernelFunc(KernelType KernelFunc, nd_item<Dims> NDIt,
 template <bool Pow2WG, typename... LocalAccT, typename... ReducerT,
           typename... ResultT, size_t... Is>
 void initReduLocalAccs(size_t LID, size_t WGSize,
-                       std::tuple<LocalAccT...> LocalAccs,
+                       ReduTupleT<LocalAccT...> LocalAccs,
                        const std::tuple<ReducerT...> &Reducers,
-                       const std::tuple<ResultT...> Identities,
+                       ReduTupleT<ResultT...> Identities,
                        std::index_sequence<Is...>) {
   std::tie(std::get<Is>(LocalAccs)[LID]...) =
       std::make_tuple(std::get<Is>(Reducers).MValue...);
@@ -1375,9 +1203,9 @@ void initReduLocalAccs(size_t LID, size_t WGSize,
 template <bool UniformPow2WG, typename... LocalAccT, typename... InputAccT,
           typename... ResultT, size_t... Is>
 void initReduLocalAccs(size_t LID, size_t GID, size_t NWorkItems, size_t WGSize,
-                       std::tuple<InputAccT...> LocalAccs,
-                       std::tuple<LocalAccT...> InputAccs,
-                       const std::tuple<ResultT...> Identities,
+                       ReduTupleT<InputAccT...> LocalAccs,
+                       ReduTupleT<LocalAccT...> InputAccs,
+                       ReduTupleT<ResultT...> Identities,
                        std::index_sequence<Is...>) {
   // Normally, the local accessors are initialized with elements from the input
   // accessors. The exception is the case when (GID >= NWorkItems), which
@@ -1402,8 +1230,8 @@ void initReduLocalAccs(size_t LID, size_t GID, size_t NWorkItems, size_t WGSize,
 
 template <typename... LocalAccT, typename... BOPsT, size_t... Is>
 void reduceReduLocalAccs(size_t IndexA, size_t IndexB,
-                         std::tuple<LocalAccT...> LocalAccs,
-                         std::tuple<BOPsT...> BOPs,
+                         ReduTupleT<LocalAccT...> LocalAccs,
+                         ReduTupleT<BOPsT...> BOPs,
                          std::index_sequence<Is...>) {
   std::tie(std::get<Is>(LocalAccs)[IndexA]...) =
       std::make_tuple((std::get<Is>(BOPs)(std::get<Is>(LocalAccs)[IndexA],
@@ -1415,8 +1243,8 @@ template <bool Pow2WG, bool IsOneWG, typename... Reductions,
           typename... Ts, size_t... Is>
 void writeReduSumsToOutAccs(
     size_t OutAccIndex, size_t WGSize, std::tuple<Reductions...> *,
-    std::tuple<OutAccT...> OutAccs, std::tuple<LocalAccT...> LocalAccs,
-    std::tuple<BOPsT...> BOPs, std::tuple<Ts...> IdentityVals,
+    ReduTupleT<OutAccT...> OutAccs, ReduTupleT<LocalAccT...> LocalAccs,
+    ReduTupleT<BOPsT...> BOPs, ReduTupleT<Ts...> IdentityVals,
     std::array<bool, sizeof...(Reductions)> IsInitializeToIdentity,
     std::index_sequence<Is...>) {
   // Add the initial value of user's variable to the final result.
@@ -1528,9 +1356,9 @@ void reduCGFuncImpl(handler &CGH, KernelType KernelFunc,
   auto OutAccsTuple =
       createReduOutAccs<IsOneWG>(NWorkGroups, CGH, ReduTuple, ReduIndices);
   auto IdentitiesTuple = getReduIdentities(ReduTuple, ReduIndices);
+  auto BOPsTuple = getReduBOPs(ReduTuple, ReduIndices);
   auto InitToIdentityProps =
       getInitToIdentityProperties(ReduTuple, ReduIndices);
-  auto BOPsTuple = getReduBOPs(ReduTuple, ReduIndices);
 
   using Name = typename get_reduction_main_kernel_name_t<
       KernelName, KernelType, Pow2WG, IsOneWG, decltype(OutAccsTuple)>::name;
@@ -1842,25 +1670,23 @@ reduction(T *VarPtr, BinaryOperation) {
   return {VarPtr};
 }
 
+// ---- has_known_identity
 template <typename BinaryOperation, typename AccumulatorT>
-struct has_known_identity : detail::has_known_identity_impl<
-                                typename std::decay<BinaryOperation>::type,
-                                typename std::decay<AccumulatorT>::type> {};
-#if __cplusplus >= 201703L
-template <typename BinaryOperation, typename AccumulatorT>
-inline constexpr bool has_known_identity_v =
-    has_known_identity<BinaryOperation, AccumulatorT>::value;
-#endif
+struct has_known_identity
+    : sycl::has_known_identity<BinaryOperation, AccumulatorT> {};
 
 template <typename BinaryOperation, typename AccumulatorT>
-struct known_identity
-    : detail::known_identity_impl<typename std::decay<BinaryOperation>::type,
-                                  typename std::decay<AccumulatorT>::type> {};
-#if __cplusplus >= 201703L
+__SYCL_INLINE_CONSTEXPR bool has_known_identity_v =
+    has_known_identity<BinaryOperation, AccumulatorT>::value;
+
+// ---- known_identity
 template <typename BinaryOperation, typename AccumulatorT>
-inline constexpr AccumulatorT known_identity_v =
+struct known_identity : sycl::known_identity<BinaryOperation, AccumulatorT> {};
+
+template <typename BinaryOperation, typename AccumulatorT>
+__SYCL_INLINE_CONSTEXPR AccumulatorT known_identity_v =
     known_identity<BinaryOperation, AccumulatorT>::value;
-#endif
+
 } // namespace ONEAPI
 } // namespace sycl
 } // __SYCL_INLINE_NAMESPACE(cl)

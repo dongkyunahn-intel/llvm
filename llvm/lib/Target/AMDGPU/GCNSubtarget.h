@@ -113,6 +113,8 @@ protected:
   bool GFX10_3Insts;
   bool GFX7GFX8GFX9Insts;
   bool SGPRInitBug;
+  bool NegativeScratchOffsetBug;
+  bool NegativeUnalignedScratchOffsetBug;
   bool HasSMemRealTime;
   bool HasIntClamp;
   bool HasFmaMixInsts;
@@ -165,6 +167,7 @@ protected:
   bool FlatGlobalInsts;
   bool FlatScratchInsts;
   bool ScalarFlatScratchInsts;
+  bool HasArchitectedFlatScratch;
   bool AddNoCarryInsts;
   bool HasUnpackedD16VMem;
   bool R600ALUInst;
@@ -186,6 +189,7 @@ protected:
   bool HasVcmpxExecWARHazard;
   bool HasLdsBranchVmemWARHazard;
   bool HasNSAtoVMEMBug;
+  bool HasNSAClauseBug;
   bool HasOffset3fBug;
   bool HasFlatSegmentOffsetBug;
   bool HasImageStoreD16Bug;
@@ -811,6 +815,9 @@ public:
     return GFX8Insts;
   }
 
+  /// \returns true if the subtarget has the v_permlanex16_b32 instruction.
+  bool hasPermLaneX16() const { return getGeneration() >= GFX10; }
+
   bool hasDPP() const {
     return HasDPP;
   }
@@ -833,6 +840,10 @@ public:
 
   bool hasPackedFP32Ops() const {
     return HasPackedFP32Ops;
+  }
+
+  bool hasFmaakFmamkF32Insts() const {
+    return getGeneration() >= GFX10;
   }
 
   bool hasExtendedImageInsts() const {
@@ -881,6 +892,12 @@ public:
 
   bool hasSGPRInitBug() const {
     return SGPRInitBug;
+  }
+
+  bool hasNegativeScratchOffsetBug() const { return NegativeScratchOffsetBug; }
+
+  bool hasNegativeUnalignedScratchOffsetBug() const {
+    return NegativeUnalignedScratchOffsetBug;
   }
 
   bool hasMFMAInlineLiteralBug() const {
@@ -937,6 +954,8 @@ public:
     return HasNSAtoVMEMBug;
   }
 
+  bool hasNSAClauseBug() const { return HasNSAClauseBug; }
+
   bool hasHardClauses() const { return getGeneration() >= GFX10; }
 
   bool hasGFX90AInsts() const { return GFX90AInsts; }
@@ -966,6 +985,10 @@ public:
   bool flatScratchIsPointer() const {
     return getGeneration() >= AMDGPUSubtarget::GFX9;
   }
+
+  /// \returns true if the flat_scratch register is initialized by the HW.
+  /// In this case it is readonly.
+  bool flatScratchIsArchitected() const { return HasArchitectedFlatScratch; }
 
   /// \returns true if the machine has merged shaders in which s0-s7 are
   /// reserved by the hardware and user SGPRs start at s8

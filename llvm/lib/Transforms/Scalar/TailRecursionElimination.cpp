@@ -799,7 +799,7 @@ bool TailRecursionEliminator::eliminate(Function &F,
                                         AliasAnalysis *AA,
                                         OptimizationRemarkEmitter *ORE,
                                         DomTreeUpdater &DTU) {
-  if (F.getFnAttribute("disable-tail-calls").getValueAsString() == "true")
+  if (F.getFnAttribute("disable-tail-calls").getValueAsBool())
     return false;
 
   bool MadeChange = false;
@@ -896,7 +896,6 @@ PreservedAnalyses TailCallElimPass::run(Function &F,
   if (!Changed)
     return PreservedAnalyses::all();
   PreservedAnalyses PA;
-  PA.preserve<GlobalsAA>();
   PA.preserve<DominatorTreeAnalysis>();
   PA.preserve<PostDominatorTreeAnalysis>();
   return PA;

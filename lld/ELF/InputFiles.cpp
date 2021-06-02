@@ -1268,7 +1268,7 @@ void ArchiveFile::fetch(const Archive::Symbol &sym) {
 //    GNU ld.
 //
 //  The second behavior is inherited from SysVR4, which based it on the FORTRAN
-//  COMMON BLOCK model. This behavior is needed for proper initalization in old
+//  COMMON BLOCK model. This behavior is needed for proper initialization in old
 //  (pre F90) FORTRAN code that is packaged into an archive.
 //
 //  The following functions search archive members for definitions to replace
@@ -1567,6 +1567,9 @@ template <class ELFT> void SharedFile::parse() {
       Symbol *s = symtab->addSymbol(
           Undefined{this, name, sym.getBinding(), sym.st_other, sym.getType()});
       s->exportDynamic = true;
+      if (s->isUndefined() && !s->isWeak() &&
+          config->unresolvedSymbolsInShlib != UnresolvedPolicy::Ignore)
+        requiredSymbols.push_back(s);
       continue;
     }
 

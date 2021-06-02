@@ -316,19 +316,19 @@ public:
     kind_sampler,
     kind_pointer,
     kind_specialization_constants_buffer,
-    kind_last = kind_specialization_constants_buffer
+    kind_stream,
+    kind_last = kind_stream
   };
 
 public:
-  SYCLIntegrationHeader(DiagnosticsEngine &Diag, bool UnnamedLambdaSupport,
-                        Sema &S);
+  SYCLIntegrationHeader(bool UnnamedLambdaSupport, Sema &S);
 
   /// Emits contents of the header into given stream.
   void emit(raw_ostream &Out);
 
   /// Emits contents of the header into a file with given name.
   /// Returns true/false on success/failure.
-  bool emit(const StringRef &MainSrc);
+  bool emit(StringRef MainSrc);
 
   ///  Signals that subsequent parameter descriptor additions will go to
   ///  the kernel with given name. Starts new kernel invocation descriptor.
@@ -431,6 +431,19 @@ private:
   Sema &S;
 };
 
+class SYCLIntegrationFooter {
+public:
+  SYCLIntegrationFooter(Sema &S) : S(S) {}
+  bool emit(StringRef MainSrc);
+  void addVarDecl(const VarDecl *VD);
+
+private:
+  bool emit(raw_ostream &O);
+  Sema &S;
+  llvm::SmallVector<const VarDecl *> SpecConstants;
+  void emitSpecIDName(raw_ostream &O, const VarDecl *VD);
+};
+
 /// Tracks expected type during expression parsing, for use in code completion.
 /// The type is tied to a particular token, all functions that update or consume
 /// the type take a start location of the token they are looking at as a
@@ -497,9 +510,6 @@ private:
 class Sema final {
   Sema(const Sema &) = delete;
   void operator=(const Sema &) = delete;
-
-  /// A key method to reduce duplicate debug info from Sema.
-  virtual void anchor();
 
   ///Source of additional semantic information.
   ExternalSemaSource *ExternalSource;
@@ -1672,6 +1682,13 @@ public:
   /// initialized but before it parses anything.
   void Initialize();
 
+  /// This virtual key function only exists to limit the emission of debug info
+  /// describing the Sema class. GCC and Clang only emit debug info for a class
+  /// with a vtable when the vtable is emitted. Sema is final and not
+  /// polymorphic, but the debug info size savings are so significant that it is
+  /// worth adding a vtable just to take advantage of this optimization.
+  virtual void anchor();
+
   const LangOptions &getLangOpts() const { return LangOpts; }
   OpenCLOptions &getOpenCLOptions() { return OpenCLFeatures; }
   FPOptions     &getCurFPFeatures() { return CurFPFeatures; }
@@ -1796,6 +1813,29 @@ public:
 
     LLVM_MARK_AS_BITMASK_ENUM(/*LargestValue=*/All)
   };
+
+private:
+  // A collection of a pair of undefined functions and their callers known
+  // to be reachable from a routine on the device (kernel or device function).
+  typedef std::pair<const FunctionDecl *, const FunctionDecl *> CallPair;
+  llvm::SmallVector<CallPair> UndefinedReachableFromSyclDevice;
+
+public:
+  // Helper routine to add a pair of Callee-Caller pair of FunctionDecl *
+  // to UndefinedReachableFromSyclDevice.
+  void addFDToReachableFromSyclDevice(const FunctionDecl *Callee,
+                                      const FunctionDecl *Caller) {
+    UndefinedReachableFromSyclDevice.push_back(std::make_pair(Callee, Caller));
+  }
+  // Helper routine to check if a pair of Callee-Caller FunctionDecl *
+  // is in UndefinedReachableFromSyclDevice.
+  bool isFDReachableFromSyclDevice(const FunctionDecl *Callee,
+                                   const FunctionDecl *Caller) {
+    return llvm::any_of(UndefinedReachableFromSyclDevice,
+                        [Callee, Caller](const CallPair &P) {
+                          return P.first == Callee && P.second == Caller;
+                        });
+  }
 
   /// A generic diagnostic builder for errors which may or may not be deferred.
   ///
@@ -1961,7 +2001,7 @@ public:
   private:
     /// Function or variable declarations to be checked for whether the deferred
     /// diagnostics should be emitted.
-    SmallVector<Decl *, 4> DeclsToCheckForDeferredDiags;
+    llvm::SmallSetVector<Decl *, 4> DeclsToCheckForDeferredDiags;
 
   public:
   // Emit all deferred diagnostics.
@@ -2027,6 +2067,7 @@ public:
   void setFunctionHasBranchIntoScope();
   void setFunctionHasBranchProtectedScope();
   void setFunctionHasIndirectGoto();
+  void setFunctionHasMustTail();
 
   void PushCompoundScope(bool IsStmtExpr);
   void PopCompoundScope();
@@ -2055,6 +2096,10 @@ public:
 
   /// Retrieve the current captured region, if any.
   sema::CapturedRegionScopeInfo *getCurCapturedRegion();
+
+  /// Retrieve the current function, if any, that should be analyzed for
+  /// potential availability violations.
+  sema::FunctionScopeInfo *getCurFunctionAvailabilityContext();
 
   /// WeakTopLevelDeclDecls - access to \#pragma weak-generated Decls
   SmallVectorImpl<Decl *> &WeakTopLevelDecls() { return WeakTopLevelDecl; }
@@ -2108,6 +2153,9 @@ public:
                                               Expr *E);
   OpenCLUnrollHintAttr *
   BuildOpenCLLoopUnrollHintAttr(const AttributeCommonInfo &A, Expr *E);
+
+  SYCLIntelFPGALoopCountAttr *
+  BuildSYCLIntelFPGALoopCount(const AttributeCommonInfo &CI, Expr *E);
 
   bool CheckQualifiedFunctionForTypeId(QualType T, SourceLocation Loc);
 
@@ -2483,6 +2531,7 @@ public:
                              const CXXScopeSpec &SS, QualType T,
                              TagDecl *OwnedTagDecl = nullptr);
 
+  QualType getDecltypeForParenthesizedExpr(Expr *E);
   QualType BuildTypeofExprType(Expr *E, SourceLocation Loc);
   /// If AsUnevaluated is false, E is treated as though it were an evaluated
   /// context, such as when building a type for decltype(auto).
@@ -2774,10 +2823,15 @@ public:
                                           SourceLocation Less,
                                           SourceLocation Greater);
 
+  void warnOnReservedIdentifier(const NamedDecl *D);
+
   Decl *ActOnDeclarator(Scope *S, Declarator &D);
 
   NamedDecl *HandleDeclarator(Scope *S, Declarator &D,
                               MultiTemplateParamsArg TemplateParameterLists);
+  bool tryToFixVariablyModifiedVarType(TypeSourceInfo *&TInfo,
+                                       QualType &T, SourceLocation Loc,
+                                       unsigned FailedFoldDiagID);
   void RegisterLocallyScopedExternCDecl(NamedDecl *ND, Scope *S);
   bool DiagnoseClassNameShadow(DeclContext *DC, DeclarationNameInfo Info);
   bool diagnoseQualifiedDeclaration(CXXScopeSpec &SS, DeclContext *DC,
@@ -3434,6 +3488,9 @@ public:
     /// Merge availability attributes for an implementation of
     /// a protocol requirement.
     AMK_ProtocolImplementation,
+    /// Merge availability attributes for an implementation of
+    /// an optional protocol requirement.
+    AMK_OptionalProtocolImplementation
   };
 
   /// Describes the kind of priority given to an availability attribute.
@@ -3493,12 +3550,6 @@ public:
                                           const AttributeCommonInfo &CI,
                                           const IdentifierInfo *Ident);
   MinSizeAttr *mergeMinSizeAttr(Decl *D, const AttributeCommonInfo &CI);
-  NoSpeculativeLoadHardeningAttr *
-  mergeNoSpeculativeLoadHardeningAttr(Decl *D,
-                                      const NoSpeculativeLoadHardeningAttr &AL);
-  SpeculativeLoadHardeningAttr *
-  mergeSpeculativeLoadHardeningAttr(Decl *D,
-                                    const SpeculativeLoadHardeningAttr &AL);
   SwiftNameAttr *mergeSwiftNameAttr(Decl *D, const SwiftNameAttr &SNA,
                                     StringRef Name);
   OptimizeNoneAttr *mergeOptimizeNoneAttr(Decl *D,
@@ -3506,8 +3557,6 @@ public:
   InternalLinkageAttr *mergeInternalLinkageAttr(Decl *D, const ParsedAttr &AL);
   InternalLinkageAttr *mergeInternalLinkageAttr(Decl *D,
                                                 const InternalLinkageAttr &AL);
-  CommonAttr *mergeCommonAttr(Decl *D, const ParsedAttr &AL);
-  CommonAttr *mergeCommonAttr(Decl *D, const CommonAttr &AL);
   WebAssemblyImportNameAttr *mergeImportNameAttr(
       Decl *D, const WebAssemblyImportNameAttr &AL);
   WebAssemblyImportModuleAttr *mergeImportModuleAttr(
@@ -4471,6 +4520,7 @@ public:
   bool checkStringLiteralArgumentAttr(const ParsedAttr &Attr, unsigned ArgNum,
                                       StringRef &Str,
                                       SourceLocation *ArgLocation = nullptr);
+  llvm::Error isValidSectionSpecifier(StringRef Str);
   bool checkSectionName(SourceLocation LiteralLoc, StringRef Str);
   bool checkTargetAttr(SourceLocation LiteralLoc, StringRef Str);
   bool checkMSInheritanceAttrOnDefinition(
@@ -4494,10 +4544,11 @@ public:
   /// Valid types should not have multiple attributes with different CCs.
   const AttributedType *getCallingConvAttributedType(QualType T) const;
 
-  /// Stmt attributes - this routine is the top level dispatcher.
-  StmtResult ProcessStmtAttributes(Stmt *Stmt,
-                                   const ParsedAttributesView &Attrs,
-                                   SourceRange Range);
+  /// Process the attributes before creating an attributed statement. Returns
+  /// the semantic attributes that have been processed.
+  void ProcessStmtAttributes(Stmt *Stmt,
+                             const ParsedAttributesWithRange &InAttrs,
+                             SmallVectorImpl<const Attr *> &OutAttrs);
 
   void WarnConflictingTypedMethods(ObjCMethodDecl *Method,
                                    ObjCMethodDecl *MethodDecl,
@@ -4836,8 +4887,9 @@ public:
   StmtResult ActOnLabelStmt(SourceLocation IdentLoc, LabelDecl *TheDecl,
                             SourceLocation ColonLoc, Stmt *SubStmt);
 
-  StmtResult ActOnAttributedStmt(SourceLocation AttrLoc,
-                                 ArrayRef<const Attr*> Attrs,
+  StmtResult BuildAttributedStmt(SourceLocation AttrsLoc,
+                                 ArrayRef<const Attr *> Attrs, Stmt *SubStmt);
+  StmtResult ActOnAttributedStmt(const ParsedAttributesWithRange &AttrList,
                                  Stmt *SubStmt);
   bool CheckRebuiltAttributedStmtAttributes(ArrayRef<const Attr *> Attrs);
 
@@ -7650,6 +7702,11 @@ public:
                            TemplateIdAnnotation *TypeConstraint,
                            TemplateTypeParmDecl *ConstrainedParameter,
                            SourceLocation EllipsisLoc);
+  bool BuildTypeConstraint(const CXXScopeSpec &SS,
+                           TemplateIdAnnotation *TypeConstraint,
+                           TemplateTypeParmDecl *ConstrainedParameter,
+                           SourceLocation EllipsisLoc,
+                           bool AllowUnexpandedPack);
 
   bool AttachTypeConstraint(NestedNameSpecifierLoc NS,
                             DeclarationNameInfo NameInfo,
@@ -10260,19 +10317,28 @@ public:
   void AddIntelFPGABankBitsAttr(Decl *D, const AttributeCommonInfo &CI,
                                 Expr **Exprs, unsigned Size);
   template <typename AttrType>
-  void addIntelSingleArgAttr(Decl *D, const AttributeCommonInfo &CI, Expr *E);
-  template <typename AttrType>
   void addIntelTripleArgAttr(Decl *D, const AttributeCommonInfo &CI,
                              Expr *XDimExpr, Expr *YDimExpr, Expr *ZDimExpr);
+  void AddWorkGroupSizeHintAttr(Decl *D, const AttributeCommonInfo &CI,
+                                Expr *XDim, Expr *YDim, Expr *ZDim);
+  WorkGroupSizeHintAttr *
+  MergeWorkGroupSizeHintAttr(Decl *D, const WorkGroupSizeHintAttr &A);
   void AddIntelReqdSubGroupSize(Decl *D, const AttributeCommonInfo &CI,
                                 Expr *E);
   IntelReqdSubGroupSizeAttr *
   MergeIntelReqdSubGroupSizeAttr(Decl *D, const IntelReqdSubGroupSizeAttr &A);
+  IntelNamedSubGroupSizeAttr *
+  MergeIntelNamedSubGroupSizeAttr(Decl *D, const IntelNamedSubGroupSizeAttr &A);
   void AddSYCLIntelNumSimdWorkItemsAttr(Decl *D, const AttributeCommonInfo &CI,
                                         Expr *E);
   SYCLIntelNumSimdWorkItemsAttr *
   MergeSYCLIntelNumSimdWorkItemsAttr(Decl *D,
                                      const SYCLIntelNumSimdWorkItemsAttr &A);
+  void AddSYCLIntelESimdVectorizeAttr(Decl *D, const AttributeCommonInfo &CI,
+                                      Expr *E);
+  SYCLIntelESimdVectorizeAttr *
+  MergeSYCLIntelESimdVectorizeAttr(Decl *D,
+                                   const SYCLIntelESimdVectorizeAttr &A);
   void AddSYCLIntelSchedulerTargetFmaxMhzAttr(Decl *D,
                                               const AttributeCommonInfo &CI,
                                               Expr *E);
@@ -10306,7 +10372,11 @@ public:
 
   SYCLIntelFPGAMaxConcurrencyAttr *MergeSYCLIntelFPGAMaxConcurrencyAttr(
       Decl *D, const SYCLIntelFPGAMaxConcurrencyAttr &A);
-
+  void AddSYCLIntelMaxGlobalWorkDimAttr(Decl *D, const AttributeCommonInfo &CI,
+                                        Expr *E);
+  SYCLIntelMaxGlobalWorkDimAttr *
+  MergeSYCLIntelMaxGlobalWorkDimAttr(Decl *D,
+                                     const SYCLIntelMaxGlobalWorkDimAttr &A);
   /// AddAlignedAttr - Adds an aligned attribute to a particular declaration.
   void AddAlignedAttr(Decl *D, const AttributeCommonInfo &CI, Expr *E,
                       bool IsPackExpansion);
@@ -10398,79 +10468,35 @@ public:
   bool checkFinalSuspendNoThrow(const Stmt *FinalSuspend);
 
   //===--------------------------------------------------------------------===//
-  // OpenCL extensions.
-  //
-private:
-  std::string CurrOpenCLExtension;
-  /// Extensions required by an OpenCL type.
-  llvm::DenseMap<const Type*, std::set<std::string>> OpenCLTypeExtMap;
-  /// Extensions required by an OpenCL declaration.
-  llvm::DenseMap<const Decl*, std::set<std::string>> OpenCLDeclExtMap;
-public:
-  llvm::StringRef getCurrentOpenCLExtension() const {
-    return CurrOpenCLExtension;
-  }
-
-  /// Check if a function declaration \p FD associates with any
-  /// extensions present in OpenCLDeclExtMap and if so return the
-  /// extension(s) name(s).
-  std::string getOpenCLExtensionsFromDeclExtMap(FunctionDecl *FD);
-
-  /// Check if a function type \p FT associates with any
-  /// extensions present in OpenCLTypeExtMap and if so return the
-  /// extension(s) name(s).
-  std::string getOpenCLExtensionsFromTypeExtMap(FunctionType *FT);
-
-  /// Find an extension in an appropriate extension map and return its name
-  template<typename T, typename MapT>
-  std::string getOpenCLExtensionsFromExtMap(T* FT, MapT &Map);
-
-  void setCurrentOpenCLExtension(llvm::StringRef Ext) {
-    CurrOpenCLExtension = std::string(Ext);
-  }
-
-  /// Set OpenCL extensions for a type which can only be used when these
-  /// OpenCL extensions are enabled. If \p Exts is empty, do nothing.
-  /// \param Exts A space separated list of OpenCL extensions.
-  void setOpenCLExtensionForType(QualType T, llvm::StringRef Exts);
-
-  /// Set OpenCL extensions for a declaration which can only be
-  /// used when these OpenCL extensions are enabled. If \p Exts is empty, do
-  /// nothing.
-  /// \param Exts A space separated list of OpenCL extensions.
-  void setOpenCLExtensionForDecl(Decl *FD, llvm::StringRef Exts);
-
-  /// Set current OpenCL extensions for a type which can only be used
-  /// when these OpenCL extensions are enabled. If current OpenCL extension is
-  /// empty, do nothing.
-  void setCurrentOpenCLExtensionForType(QualType T);
-
-  /// Set current OpenCL extensions for a declaration which
-  /// can only be used when these OpenCL extensions are enabled. If current
-  /// OpenCL extension is empty, do nothing.
-  void setCurrentOpenCLExtensionForDecl(Decl *FD);
-
-  bool isOpenCLDisabledDecl(Decl *FD);
-
-  /// Check if type \p T corresponding to declaration specifier \p DS
-  /// is disabled due to required OpenCL extensions being disabled. If so,
-  /// emit diagnostics.
-  /// \return true if type is disabled.
-  bool checkOpenCLDisabledTypeDeclSpec(const DeclSpec &DS, QualType T);
-
-  /// Check if declaration \p D used by expression \p E
-  /// is disabled due to required OpenCL extensions being disabled. If so,
-  /// emit diagnostics.
-  /// \return true if type is disabled.
-  bool checkOpenCLDisabledDecl(const NamedDecl &D, const Expr &E);
-
-  //===--------------------------------------------------------------------===//
   // OpenMP directives and clauses.
   //
 private:
   void *VarDataSharingAttributesStack;
+
+  struct DeclareTargetContextInfo {
+    struct MapInfo {
+      OMPDeclareTargetDeclAttr::MapTypeTy MT;
+      SourceLocation Loc;
+    };
+    /// Explicitly listed variables and functions in a 'to' or 'link' clause.
+    llvm::DenseMap<NamedDecl *, MapInfo> ExplicitlyMapped;
+
+    /// The 'device_type' as parsed from the clause.
+    OMPDeclareTargetDeclAttr::DevTypeTy DT = OMPDeclareTargetDeclAttr::DT_Any;
+
+    /// The directive kind, `begin declare target` or `declare target`.
+    OpenMPDirectiveKind Kind;
+
+    /// The directive location.
+    SourceLocation Loc;
+
+    DeclareTargetContextInfo(OpenMPDirectiveKind Kind, SourceLocation Loc)
+        : Kind(Kind), Loc(Loc) {}
+  };
+
   /// Number of nested '#pragma omp declare target' directives.
-  SmallVector<SourceLocation, 4> DeclareTargetNesting;
+  SmallVector<DeclareTargetContextInfo, 4> DeclareTargetNesting;
+
   /// Initialization of data-sharing attributes stack.
   void InitDataSharingAttributesStack();
   void DestroyDataSharingAttributesStack();
@@ -10493,21 +10519,6 @@ private:
 
   /// Pop OpenMP function region for non-capturing function.
   void popOpenMPFunctionRegion(const sema::FunctionScopeInfo *OldFSI);
-
-  /// Checks if a type or a declaration is disabled due to the owning extension
-  /// being disabled, and emits diagnostic messages if it is disabled.
-  /// \param D type or declaration to be checked.
-  /// \param DiagLoc source location for the diagnostic message.
-  /// \param DiagInfo information to be emitted for the diagnostic message.
-  /// \param SrcRange source range of the declaration.
-  /// \param Map maps type or declaration to the extensions.
-  /// \param Selector selects diagnostic message: 0 for type and 1 for
-  ///        declaration.
-  /// \return true if the type or declaration is disabled.
-  template <typename T, typename DiagLocT, typename DiagInfoT, typename MapT>
-  bool checkOpenCLDisabledTypeOrDecl(T D, DiagLocT DiagLoc, DiagInfoT DiagInfo,
-                                     MapT &Map, unsigned Selector = 0,
-                                     SourceRange SrcRange = SourceRange());
 
   /// Helper to keep information about the current `omp begin/end declare
   /// variant` nesting.
@@ -10736,19 +10747,28 @@ public:
   const ValueDecl *getOpenMPDeclareMapperVarName() const;
 
   /// Called on the start of target region i.e. '#pragma omp declare target'.
-  bool ActOnStartOpenMPDeclareTargetDirective(SourceLocation Loc);
-  /// Called at the end of target region i.e. '#pragme omp end declare target'.
-  void ActOnFinishOpenMPDeclareTargetDirective();
+  bool ActOnStartOpenMPDeclareTargetContext(DeclareTargetContextInfo &DTCI);
+
+  /// Called at the end of target region i.e. '#pragma omp end declare target'.
+  const DeclareTargetContextInfo ActOnOpenMPEndDeclareTargetDirective();
+
+  /// Called once a target context is completed, that can be when a
+  /// '#pragma omp end declare target' was encountered or when a
+  /// '#pragma omp declare target' without declaration-definition-seq was
+  /// encountered.
+  void ActOnFinishedOpenMPDeclareTargetContext(DeclareTargetContextInfo &DTCI);
+
   /// Searches for the provided declaration name for OpenMP declare target
   /// directive.
-  NamedDecl *
-  lookupOpenMPDeclareTargetName(Scope *CurScope, CXXScopeSpec &ScopeSpec,
-                                const DeclarationNameInfo &Id,
-                                NamedDeclSetType &SameDirectiveDecls);
+  NamedDecl *lookupOpenMPDeclareTargetName(Scope *CurScope,
+                                           CXXScopeSpec &ScopeSpec,
+                                           const DeclarationNameInfo &Id);
+
   /// Called on correct id-expression from the '#pragma omp declare target'.
   void ActOnOpenMPDeclareTargetName(NamedDecl *ND, SourceLocation Loc,
                                     OMPDeclareTargetDeclAttr::MapTypeTy MT,
                                     OMPDeclareTargetDeclAttr::DevTypeTy DT);
+
   /// Check declaration inside target region.
   void
   checkDeclIsAllowedInOpenMPTarget(Expr *E, Decl *D,
@@ -11069,6 +11089,16 @@ public:
   StmtResult ActOnOpenMPInteropDirective(ArrayRef<OMPClause *> Clauses,
                                          SourceLocation StartLoc,
                                          SourceLocation EndLoc);
+  /// Called on well-formed '\#pragma omp dispatch' after parsing of the
+  // /associated statement.
+  StmtResult ActOnOpenMPDispatchDirective(ArrayRef<OMPClause *> Clauses,
+                                          Stmt *AStmt, SourceLocation StartLoc,
+                                          SourceLocation EndLoc);
+  /// Called on well-formed '\#pragma omp masked' after parsing of the
+  // /associated statement.
+  StmtResult ActOnOpenMPMaskedDirective(ArrayRef<OMPClause *> Clauses,
+                                        Stmt *AStmt, SourceLocation StartLoc,
+                                        SourceLocation EndLoc);
 
   /// Checks correctness of linear modifiers.
   bool CheckOpenMPLinearModifier(OpenMPLinearClauseKind LinKind,
@@ -11277,7 +11307,20 @@ public:
                                       SourceLocation LParenLoc,
                                       SourceLocation VarLoc,
                                       SourceLocation EndLoc);
-
+  /// Called on well-formed 'novariants' clause.
+  OMPClause *ActOnOpenMPNovariantsClause(Expr *Condition,
+                                         SourceLocation StartLoc,
+                                         SourceLocation LParenLoc,
+                                         SourceLocation EndLoc);
+  /// Called on well-formed 'nocontext' clause.
+  OMPClause *ActOnOpenMPNocontextClause(Expr *Condition,
+                                        SourceLocation StartLoc,
+                                        SourceLocation LParenLoc,
+                                        SourceLocation EndLoc);
+  /// Called on well-formed 'filter' clause.
+  OMPClause *ActOnOpenMPFilterClause(Expr *ThreadID, SourceLocation StartLoc,
+                                     SourceLocation LParenLoc,
+                                     SourceLocation EndLoc);
   /// Called on well-formed 'threads' clause.
   OMPClause *ActOnOpenMPThreadsClause(SourceLocation StartLoc,
                                       SourceLocation EndLoc);
@@ -11604,6 +11647,18 @@ public:
   /// function, issuing a diagnostic if not.
   void checkVariadicArgument(const Expr *E, VariadicCallType CT);
 
+  /// Check whether the given statement can have musttail applied to it,
+  /// issuing a diagnostic and returning false if not. In the success case,
+  /// the statement is rewritten to remove implicit nodes from the return
+  /// value.
+  bool checkAndRewriteMustTailAttr(Stmt *St, const Attr &MTA);
+
+private:
+  /// Check whether the given statement can have musttail applied to it,
+  /// issuing a diagnostic and returning false if not.
+  bool checkMustTailAttr(const Stmt *St, const Attr &MTA);
+
+public:
   /// Check to see if a given expression could have '.c_str()' called on it.
   bool hasCStrMethod(const Expr *E);
 
@@ -11908,6 +11963,9 @@ public:
 
   bool isValidSveBitcast(QualType srcType, QualType destType);
 
+  bool areMatrixTypesOfTheSameDimension(QualType srcTy, QualType destTy);
+
+  bool areVectorTypesSameSize(QualType srcType, QualType destType);
   bool areLaxCompatibleVectorTypes(QualType srcType, QualType destType);
   bool isLaxVectorConversion(QualType srcType, QualType destType);
 
@@ -11965,6 +12023,13 @@ public:
   /// __unknown_anytype parameter.
   ExprResult checkUnknownAnyArg(SourceLocation callLoc,
                                 Expr *result, QualType &paramType);
+
+  // CheckMatrixCast - Check type constraints for matrix casts.
+  // We allow casting between matrixes of the same dimensions i.e. when they
+  // have the same number of rows and column. Returns true if the cast is
+  // invalid.
+  bool CheckMatrixCast(SourceRange R, QualType DestTy, QualType SrcTy,
+                       CastKind &Kind);
 
   // CheckVectorCast - check type constraints for vectors.
   // Since vectors are an extension, there are no C standard reference for this.
@@ -12336,6 +12401,15 @@ public:
   CUDAFunctionTarget IdentifyCUDATarget(const FunctionDecl *D,
                                         bool IgnoreImplicitHDAttr = false);
   CUDAFunctionTarget IdentifyCUDATarget(const ParsedAttributesView &Attrs);
+
+  enum CUDAVariableTarget {
+    CVT_Device,  /// Emitted on device side with a shadow variable on host side
+    CVT_Host,    /// Emitted on host side only
+    CVT_Both,    /// Emitted on both sides with different addresses
+    CVT_Unified, /// Emitted as a unified address, e.g. managed variables
+  };
+  /// Determines whether the given variable is emitted on host or device side.
+  CUDAVariableTarget IdentifyCUDATarget(const VarDecl *D);
 
   /// Gets the CUDA target for the current context.
   CUDAFunctionTarget CurrentCUDATarget() {
@@ -12740,6 +12814,7 @@ private:
   bool CheckPPCBuiltinFunctionCall(const TargetInfo &TI, unsigned BuiltinID,
                                    CallExpr *TheCall);
   bool CheckAMDGCNBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
+  bool CheckRISCVLMUL(CallExpr *TheCall, unsigned ArgNum);
   bool CheckRISCVBuiltinFunctionCall(const TargetInfo &TI, unsigned BuiltinID,
                                      CallExpr *TheCall);
 
@@ -13119,6 +13194,7 @@ private:
   // SYCL integration header instance for current compilation unit this Sema
   // is associated with.
   std::unique_ptr<SYCLIntegrationHeader> SyclIntHeader;
+  std::unique_ptr<SYCLIntegrationFooter> SyclIntFooter;
 
   // Used to suppress diagnostics during kernel construction, since these were
   // already emitted earlier. Diagnosing during Kernel emissions also skips the
@@ -13133,8 +13209,19 @@ public:
   SYCLIntegrationHeader &getSyclIntegrationHeader() {
     if (SyclIntHeader == nullptr)
       SyclIntHeader = std::make_unique<SYCLIntegrationHeader>(
-          getDiagnostics(), getLangOpts().SYCLUnnamedLambda, *this);
+          getLangOpts().SYCLUnnamedLambda, *this);
     return *SyclIntHeader.get();
+  }
+
+  SYCLIntegrationFooter &getSyclIntegrationFooter() {
+    if (SyclIntFooter == nullptr)
+      SyclIntFooter = std::make_unique<SYCLIntegrationFooter>(*this);
+    return *SyclIntFooter.get();
+  }
+
+  void addSyclVarDecl(VarDecl *VD) {
+    if (LangOpts.SYCLIsDevice && !LangOpts.SYCLIntFooter.empty())
+      getSyclIntegrationFooter().addVarDecl(VD);
   }
 
   enum SYCLRestrictKind {
@@ -13157,7 +13244,7 @@ public:
   void checkSYCLDeviceVarDecl(VarDecl *Var);
   void copySYCLKernelAttrs(const CXXRecordDecl *KernelObj);
   void ConstructOpenCLKernel(FunctionDecl *KernelCallerFunc, MangleContext &MC);
-  void MarkDevice();
+  void MarkDevices();
 
   /// Emit a diagnostic about the given attribute having a deprecated name, and
   /// also emit a fixit hint to generate the new attribute name.
@@ -13211,47 +13298,17 @@ public:
   /// properly declared for device compilation.
   void finalizeSYCLDelayedAnalysis(const FunctionDecl *Caller,
                                    const FunctionDecl *Callee,
-                                   SourceLocation Loc);
+                                   SourceLocation Loc,
+                                   DeviceDiagnosticReason Reason);
 
   /// Tells whether given variable is a SYCL explicit SIMD extension's "private
   /// global" variable - global variable in the private address space.
   bool isSYCLEsimdPrivateGlobal(VarDecl *VDecl) {
     return getLangOpts().SYCLIsDevice && VDecl->hasAttr<SYCLSimdAttr>() &&
            VDecl->hasGlobalStorage() &&
-           (VDecl->getType().getAddressSpace() == LangAS::opencl_private);
+           (VDecl->getType().getAddressSpace() == LangAS::sycl_private);
   }
 };
-
-template <typename AttrType>
-void Sema::addIntelSingleArgAttr(Decl *D, const AttributeCommonInfo &CI,
-                                 Expr *E) {
-  assert(E && "Attribute must have an argument.");
-
-  if (!E->isInstantiationDependent()) {
-    llvm::APSInt ArgVal;
-    ExprResult ICE = VerifyIntegerConstantExpression(E, &ArgVal);
-    if (ICE.isInvalid())
-      return;
-    E = ICE.get();
-    int32_t ArgInt = ArgVal.getSExtValue();
-    if (CI.getParsedKind() == ParsedAttr::AT_SYCLIntelMaxGlobalWorkDim) {
-      if (ArgInt < 0) {
-        Diag(E->getExprLoc(), diag::err_attribute_requires_positive_integer)
-            << CI << /*non-negative*/ 1;
-        return;
-      }
-    }
-    if (CI.getParsedKind() == ParsedAttr::AT_SYCLIntelMaxGlobalWorkDim) {
-      if (ArgInt > 3) {
-        Diag(E->getBeginLoc(), diag::err_attribute_argument_out_of_range)
-            << CI << 0 << 3 << E->getSourceRange();
-        return;
-      }
-    }
-  }
-
-  D->addAttr(::new (Context) AttrType(Context, CI, E));
-}
 
 inline Expr *checkMaxWorkSizeAttrExpr(Sema &S, const AttributeCommonInfo &CI,
                                       Expr *E) {
@@ -13386,7 +13443,8 @@ FPGALoopAttrT *Sema::BuildSYCLIntelFPGALoopAttr(const AttributeCommonInfo &A,
                A.getParsedKind() ==
                    ParsedAttr::AT_SYCLIntelFPGAMaxInterleaving ||
                A.getParsedKind() ==
-                   ParsedAttr::AT_SYCLIntelFPGASpeculatedIterations) {
+                   ParsedAttr::AT_SYCLIntelFPGASpeculatedIterations ||
+               A.getParsedKind() == ParsedAttr::AT_SYCLIntelFPGALoopCount) {
       if (Val < 0) {
         Diag(E->getExprLoc(), diag::err_attribute_requires_positive_integer)
             << A.getAttrName() << /* non-negative */ 1;

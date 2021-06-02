@@ -1243,9 +1243,9 @@ std::string getSPIRVImageTypePostfixes(StringRef SampledType,
                                        SPIRVAccessQualifierKind Acc) {
   std::string S;
   raw_string_ostream OS(S);
-  OS << SampledType << kSPIRVTypeName::PostfixDelim << Desc.Dim
-     << kSPIRVTypeName::PostfixDelim << Desc.Depth
-     << kSPIRVTypeName::PostfixDelim << Desc.Arrayed
+  OS << kSPIRVTypeName::PostfixDelim << SampledType
+     << kSPIRVTypeName::PostfixDelim << Desc.Dim << kSPIRVTypeName::PostfixDelim
+     << Desc.Depth << kSPIRVTypeName::PostfixDelim << Desc.Arrayed
      << kSPIRVTypeName::PostfixDelim << Desc.MS << kSPIRVTypeName::PostfixDelim
      << Desc.Sampled << kSPIRVTypeName::PostfixDelim << Desc.Format
      << kSPIRVTypeName::PostfixDelim << Acc;
@@ -1320,8 +1320,6 @@ std::string mapOCLTypeNameToSPIRV(StringRef Name, StringRef Acc) {
   std::string BaseTy;
   std::string Postfixes;
   raw_string_ostream OS(Postfixes);
-  if (!Acc.empty())
-    OS << kSPIRVTypeName::PostfixDelim;
   if (Name.startswith(kSPR2TypeName::ImagePrefix)) {
     std::string ImageTyName = getImageBaseTypeName(Name);
     auto Desc = map<SPIRVTypeImageDescriptor>(ImageTyName);
@@ -1528,6 +1526,35 @@ bool hasLoopMetadata(const Module *M) {
   return false;
 }
 
+bool isSPIRVOCLExtInst(const CallInst *CI, OCLExtOpKind *ExtOp) {
+  StringRef DemangledName;
+  if (!oclIsBuiltin(CI->getCalledFunction()->getName(), DemangledName))
+    return false;
+  StringRef S = DemangledName;
+  if (!S.startswith(kSPIRVName::Prefix))
+    return false;
+  S = S.drop_front(strlen(kSPIRVName::Prefix));
+  auto Loc = S.find(kSPIRVPostfix::Divider);
+  auto ExtSetName = S.substr(0, Loc);
+  SPIRVExtInstSetKind Set = SPIRVEIS_Count;
+  if (!SPIRVExtSetShortNameMap::rfind(ExtSetName.str(), &Set))
+    return false;
+
+  if (Set != SPIRVEIS_OpenCL)
+    return false;
+
+  auto ExtOpName = S.substr(Loc + 1);
+  auto PostFixPos = ExtOpName.find("_R");
+  ExtOpName = ExtOpName.substr(0, PostFixPos);
+
+  OCLExtOpKind EOC;
+  if (!OCLExtOpMap::rfind(ExtOpName.str(), &EOC))
+    return false;
+
+  *ExtOp = EOC;
+  return true;
+}
+
 // Returns true if type(s) and number of elements (if vector) is valid
 bool checkTypeForSPIRVExtendedInstLowering(IntrinsicInst *II, SPIRVModule *BM) {
   switch (II->getIntrinsicID()) {
@@ -1652,9 +1679,29 @@ private:
 class OpenCLStdToSPIRVFriendlyIRMangleInfo : public BuiltinFuncMangleInfo {
 public:
   OpenCLStdToSPIRVFriendlyIRMangleInfo(OCLExtOpKind ExtOpId,
-                                       ArrayRef<Type *> ArgTys)
+                                       ArrayRef<Type *> ArgTys, Type *RetTy)
       : ExtOpId(ExtOpId), ArgTys(ArgTys) {
-    UnmangledName = getSPIRVExtFuncName(SPIRVEIS_OpenCL, ExtOpId);
+
+    std::string Postfix = "";
+    if (needRetTypePostfix())
+      Postfix = kSPIRVPostfix::Divider + getPostfixForReturnType(RetTy, true);
+
+    UnmangledName = getSPIRVExtFuncName(SPIRVEIS_OpenCL, ExtOpId, Postfix);
+  }
+
+  bool needRetTypePostfix() {
+    switch (ExtOpId) {
+    case OpenCLLIB::Vload_half:
+      LLVM_FALLTHROUGH;
+    case OpenCLLIB::Vload_halfn:
+      LLVM_FALLTHROUGH;
+    case OpenCLLIB::Vloada_halfn:
+      LLVM_FALLTHROUGH;
+    case OpenCLLIB::Vloadn:
+      return true;
+    default:
+      return false;
+    }
   }
 
   void init(StringRef) override {
@@ -1707,8 +1754,9 @@ private:
 
 namespace SPIRV {
 std::string getSPIRVFriendlyIRFunctionName(OCLExtOpKind ExtOpId,
-                                           ArrayRef<Type *> ArgTys) {
-  OpenCLStdToSPIRVFriendlyIRMangleInfo MangleInfo(ExtOpId, ArgTys);
+                                           ArrayRef<Type *> ArgTys,
+                                           Type *RetTy) {
+  OpenCLStdToSPIRVFriendlyIRMangleInfo MangleInfo(ExtOpId, ArgTys, RetTy);
   return mangleBuiltin(MangleInfo.getUnmangledName(), ArgTys, &MangleInfo);
 }
 

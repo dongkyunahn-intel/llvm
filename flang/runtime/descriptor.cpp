@@ -17,14 +17,17 @@
 
 namespace Fortran::runtime {
 
-Descriptor::Descriptor(const Descriptor &that) {
-  std::memcpy(this, &that, that.SizeInBytes());
-}
+Descriptor::Descriptor(const Descriptor &that) { *this = that; }
 
 Descriptor::~Descriptor() {
   if (raw_.attribute != CFI_attribute_pointer) {
     Deallocate();
   }
+}
+
+Descriptor &Descriptor::operator=(const Descriptor &that) {
+  std::memcpy(this, &that, that.SizeInBytes());
+  return *this;
 }
 
 void Descriptor::Establish(TypeCode t, std::size_t elementBytes, void *p,
@@ -224,12 +227,30 @@ bool Descriptor::SubscriptsForZeroBasedElementNumber(SubscriptValue *subscript,
   for (int j{raw_.rank - 1}; j >= 0; --j) {
     int k{permutation ? permutation[j] : j};
     const Dimension &dim{GetDimension(k)};
-    std::size_t quotient{j ? elementNumber / dimCoefficient[j] : 0};
-    subscript[k] =
-        dim.LowerBound() + elementNumber - dimCoefficient[j] * quotient;
-    elementNumber = quotient;
+    std::size_t quotient{elementNumber / dimCoefficient[j]};
+    subscript[k] = quotient + dim.LowerBound();
+    elementNumber -= quotient * dimCoefficient[j];
   }
   return true;
+}
+
+bool Descriptor::EstablishPointerSection(const Descriptor &source,
+    const SubscriptValue *lower, const SubscriptValue *upper,
+    const SubscriptValue *stride) {
+  *this = source;
+  raw_.attribute = CFI_attribute_pointer;
+  int newRank{raw_.rank};
+  for (int j{0}; j < raw_.rank; ++j) {
+    if (!stride || stride[j] == 0) {
+      if (newRank > 0) {
+        --newRank;
+      } else {
+        return false;
+      }
+    }
+  }
+  raw_.rank = newRank;
+  return CFI_section(&raw_, &source.raw_, lower, upper, stride) == CFI_SUCCESS;
 }
 
 void Descriptor::Check() const {
@@ -256,6 +277,17 @@ void Descriptor::Dump(FILE *f) const {
   if (const DescriptorAddendum * addendum{Addendum()}) {
     addendum->Dump(f);
   }
+}
+
+DescriptorAddendum &DescriptorAddendum::operator=(
+    const DescriptorAddendum &that) {
+  derivedType_ = that.derivedType_;
+  flags_ = that.flags_;
+  auto lenParms{that.LenParameters()};
+  for (std::size_t j{0}; j < lenParms; ++j) {
+    len_[j] = that.len_[j];
+  }
+  return *this;
 }
 
 std::size_t DescriptorAddendum::SizeInBytes() const {

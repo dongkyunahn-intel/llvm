@@ -214,8 +214,8 @@ define void @f35() optnone noinline
         ret void;
 }
 
-define void @f36(i8* inalloca %0) {
-; CHECK: define void @f36(i8* inalloca %0) {
+define void @f36(i8* inalloca(i8) %0) {
+; CHECK: define void @f36(i8* inalloca(i8) %0) {
         ret void
 }
 
@@ -445,6 +445,12 @@ define void @f74() vscale_range(1,0)
 define void @f75() vscale_range(0,0)
 {
   ret void
+}
+
+; CHECK: define void @f76(i8* swiftasync %0)
+define void @f76(i8* swiftasync %0)
+{
+  ret void;
 }
 
 ; CHECK: attributes #0 = { noreturn }
