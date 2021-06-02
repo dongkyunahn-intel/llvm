@@ -516,6 +516,18 @@ pi_result piPlatformGetInfo(pi_platform Platform, pi_platform_info ParamName,
   return PI_SUCCESS;
 }
 
+pi_result piextKernelCreateWithNativeHandle(pi_native_handle, pi_context, bool,
+                                            pi_kernel *) {
+  DIE_NO_IMPLEMENTATION;
+  return PI_SUCCESS;
+}
+
+pi_result piextKernelGetNativeHandle(pi_kernel Kernel,
+                                     pi_native_handle *NativeHandle) {
+  DIE_NO_IMPLEMENTATION;
+  return PI_SUCCESS;
+}
+
 pi_result piextPlatformGetNativeHandle(pi_platform Platform,
                                        pi_native_handle *NativeHandle) {
   DIE_NO_IMPLEMENTATION;

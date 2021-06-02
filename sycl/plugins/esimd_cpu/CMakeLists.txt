@@ -3,7 +3,7 @@
 # Create Shared library for libpi_esimd_cpu.so.
 
 include_directories("${sycl_inc_dir}")
-include_directories(${OPENCL_INCLUDE})
+include_directories(${OpenCL_INCLUDE_DIR})
 include_directories(${LIBCMRT_INCLUDE})
 
 add_library(pi_esimd_cpu SHARED
@@ -14,7 +14,7 @@ add_library(pi_esimd_cpu SHARED
 add_dependencies(sycl-toolchain pi_esimd_cpu)
 
 add_dependencies(pi_esimd_cpu
-  ocl-headers)
+  OpenCL-Headers)
 
 target_link_libraries(pi_esimd_cpu PRIVATE sycl)
 set_target_properties(pi_esimd_cpu PROPERTIES LINKER_LANGUAGE CXX)
