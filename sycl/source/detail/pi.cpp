@@ -65,7 +65,8 @@ void *getPluginOpaqueData(void *OpaqueDataParam) {
   return ReturnOpaqueData;
 }
 
-template __SYCL_EXPORT void *getPluginOpaqueData<cl::sycl::backend::esimd_cpu>(void *);
+template __SYCL_EXPORT void *
+getPluginOpaqueData<cl::sycl::backend::esimd_cpu>(void *);
 
 namespace pi {
 
