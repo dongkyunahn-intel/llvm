@@ -85,13 +85,12 @@ ESIMDDeviceInterface *getESIMDDeviceInterface() {
     // versions of PluginOpaqueData is not backward compatible, unlike
     // layout of the ESIMDDeviceInterface.
 
-    std::cerr
-        << __FUNCTION__ << std::endl
-        << "Opaque data returned by ESIMD Emu plugin is incompatible with"
-        << "the one used in current implementation." << std::endl
-        << "Returned version : " << OpaqueData->version << std::endl
-        << "Required version : " << ESIMD_EMU_PLUGIN_OPAQUE_DATA_VERSION
-        << std::endl;
+    std::cerr << __FUNCTION__ << std::endl
+              << "Opaque data returned by ESIMD Emu plugin is incompatible with"
+              << "the one used in current implementation." << std::endl
+              << "Returned version : " << OpaqueData->version << std::endl
+              << "Required version : " << ESIMD_EMU_PLUGIN_OPAQUE_DATA_VERSION
+              << std::endl;
     throw cl::sycl::feature_not_supported();
   }
   // Opaque data version is OK, can cast the 'data' field.
