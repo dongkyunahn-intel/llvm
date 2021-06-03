@@ -1,4 +1,4 @@
-//==------------ memory_intrin.hpp - DPC++ Explicit SIMD API ---------------==//
+//==------------ esimd_memory_intrin.hpp - DPC++ Explicit SIMD API ---------==//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,132 +11,77 @@
 
 #pragma once
 
-#include <CL/sycl/detail/accessor_impl.hpp>
+#include <CL/sycl/INTEL/esimd/detail/atomic_intrin.hpp>
+#include <CL/sycl/INTEL/esimd/detail/esimd_types.hpp>
+#include <CL/sycl/INTEL/esimd/detail/esimd_util.hpp>
+#include <CL/sycl/INTEL/esimd/esimd_enum.hpp>
 #include <CL/sycl/types.hpp>
-#include <sycl/ext/intel/experimental/esimd/common.hpp>
-#include <sycl/ext/intel/experimental/esimd/detail/types.hpp>
-#include <sycl/ext/intel/experimental/esimd/detail/util.hpp>
-
 #include <cstdint>
-
-__SYCL_INLINE_NAMESPACE(cl) {
-namespace sycl {
-namespace ext {
-namespace intel {
-namespace experimental {
-namespace esimd {
-namespace detail {
-// Provides access to sycl accessor class' private members.
-class AccessorPrivateProxy {
-public:
-#ifdef __SYCL_DEVICE_ONLY__
-  template <typename AccessorTy>
-  static auto getNativeImageObj(const AccessorTy &Acc) {
-    return Acc.getNativeImageObj();
-  }
-#else
-  template <typename AccessorTy>
-  static auto getImageRange(const AccessorTy &Acc) {
-    return Acc.getAccessRange();
-  }
-  static auto getElemSize(const sycl::detail::AccessorBaseHost &Acc) {
-    return Acc.getElemSize();
-  }
-#endif
-};
-
-template <int ElemsPerAddr,
-          typename = sycl::detail::enable_if_t<
-              (ElemsPerAddr == 1 || ElemsPerAddr == 2 || ElemsPerAddr == 4)>>
-constexpr unsigned int ElemsPerAddrEncoding() {
-  // encoding requires log2 of ElemsPerAddr
-  if constexpr (ElemsPerAddr == 1)
-    return 0;
-  else if constexpr (ElemsPerAddr == 2)
-    return 1;
-  else if constexpr (ElemsPerAddr == 4)
-    return 2;
-
-  // other cases not needed since enable_if disallows other values
-}
-
-constexpr unsigned int ElemsPerAddrDecoding(unsigned int ElemsPerAddrEncoded) {
-  // encoding requires 2^ElemsPerAddrEncoded
-  return (1 << ElemsPerAddrEncoded);
-}
-
-} // namespace detail
-
-} // namespace esimd
-} // namespace experimental
-} // namespace intel
-} // namespace ext
-} // namespace sycl
-} // __SYCL_INLINE_NAMESPACE(cl)
-
-#define __SEIEE sycl::ext::intel::experimental::esimd
-#define __SEIEED sycl::ext::intel::experimental::esimd::detail
 
 // flat_read does flat-address gather
 template <typename Ty, int N, int NumBlk = 0,
-          __SEIEE::CacheHint L1H = __SEIEE::CacheHint::None,
-          __SEIEE::CacheHint L3H = __SEIEE::CacheHint::None>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION
-    __SEIEED::vector_type_t<Ty, N * __SEIEED::ElemsPerAddrDecoding(NumBlk)>
-    __esimd_flat_read(__SEIEED::vector_type_t<uint64_t, N> addrs,
-                      int ElemsPerAddr = NumBlk,
-                      __SEIEED::vector_type_t<uint16_t, N> pred = 1);
+          sycl::INTEL::gpu::CacheHint L1H = sycl::INTEL::gpu::CacheHint::None,
+          sycl::INTEL::gpu::CacheHint L3H = sycl::INTEL::gpu::CacheHint::None>
+SYCL_EXTERNAL sycl::INTEL::gpu::vector_type_t<
+    Ty, N * sycl::INTEL::gpu::ElemsPerAddrDecoding(NumBlk)>
+__esimd_flat_read(sycl::INTEL::gpu::vector_type_t<uint64_t, N> addrs,
+                  int ElemsPerAddr = NumBlk,
+                  sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred = 1);
 
 // flat_write does flat-address scatter
 template <typename Ty, int N, int NumBlk = 0,
-          __SEIEE::CacheHint L1H = __SEIEE::CacheHint::None,
-          __SEIEE::CacheHint L3H = __SEIEE::CacheHint::None>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION void __esimd_flat_write(
-    __SEIEED::vector_type_t<uint64_t, N> addrs,
-    __SEIEED::vector_type_t<Ty, N * __SEIEED::ElemsPerAddrDecoding(NumBlk)>
-        vals,
-    int ElemsPerAddr = NumBlk, __SEIEED::vector_type_t<uint16_t, N> pred = 1);
+          sycl::INTEL::gpu::CacheHint L1H = sycl::INTEL::gpu::CacheHint::None,
+          sycl::INTEL::gpu::CacheHint L3H = sycl::INTEL::gpu::CacheHint::None>
+SYCL_EXTERNAL void
+__esimd_flat_write(sycl::INTEL::gpu::vector_type_t<uint64_t, N> addrs,
+                   sycl::INTEL::gpu::vector_type_t<
+                       Ty, N * sycl::INTEL::gpu::ElemsPerAddrDecoding(NumBlk)>
+                       vals,
+                   int ElemsPerAddr = NumBlk,
+                   sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred = 1);
 
 // flat_block_read reads a block of data from one flat address
-template <typename Ty, int N, __SEIEE::CacheHint L1H = __SEIEE::CacheHint::None,
-          __SEIEE::CacheHint L3H = __SEIEE::CacheHint::None>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION __SEIEED::vector_type_t<Ty, N>
+template <typename Ty, int N,
+          sycl::INTEL::gpu::CacheHint L1H = sycl::INTEL::gpu::CacheHint::None,
+          sycl::INTEL::gpu::CacheHint L3H = sycl::INTEL::gpu::CacheHint::None>
+SYCL_EXTERNAL sycl::INTEL::gpu::vector_type_t<Ty, N>
 __esimd_flat_block_read_unaligned(uint64_t addr);
 
 // flat_block_write writes a block of data using one flat address
-template <typename Ty, int N, __SEIEE::CacheHint L1H = __SEIEE::CacheHint::None,
-          __SEIEE::CacheHint L3H = __SEIEE::CacheHint::None>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION void
-__esimd_flat_block_write(uint64_t addr, __SEIEED::vector_type_t<Ty, N> vals);
+template <typename Ty, int N,
+          sycl::INTEL::gpu::CacheHint L1H = sycl::INTEL::gpu::CacheHint::None,
+          sycl::INTEL::gpu::CacheHint L3H = sycl::INTEL::gpu::CacheHint::None>
+SYCL_EXTERNAL void
+__esimd_flat_block_write(uint64_t addr,
+                         sycl::INTEL::gpu::vector_type_t<Ty, N> vals);
 
 // Reads a block of data from given surface at given offset.
 template <typename Ty, int N, typename SurfIndAliasTy>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION __SEIEED::vector_type_t<Ty, N>
+SYCL_EXTERNAL sycl::INTEL::gpu::vector_type_t<Ty, N>
 __esimd_block_read(SurfIndAliasTy surf_ind, uint32_t offset);
 
 // Writes given block of data to a surface with given index at given offset.
 template <typename Ty, int N, typename SurfIndAliasTy>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION void
+SYCL_EXTERNAL void
 __esimd_block_write(SurfIndAliasTy surf_ind, uint32_t offset,
-                    __SEIEED::vector_type_t<Ty, N> vals);
+                    sycl::INTEL::gpu::vector_type_t<Ty, N> vals);
 
 // flat_read4 does flat-address gather4
-template <typename Ty, int N, __SEIEE::ChannelMaskType Mask,
-          __SEIEE::CacheHint L1H = __SEIEE::CacheHint::None,
-          __SEIEE::CacheHint L3H = __SEIEE::CacheHint::None>
-__SEIEED::vector_type_t<Ty, N * NumChannels(Mask)>
-    SYCL_EXTERNAL SYCL_ESIMD_FUNCTION
-    __esimd_flat_read4(__SEIEED::vector_type_t<uint64_t, N> addrs,
-                       __SEIEED::vector_type_t<uint16_t, N> pred = 1);
+template <typename Ty, int N, sycl::INTEL::gpu::ChannelMaskType Mask,
+          sycl::INTEL::gpu::CacheHint L1H = sycl::INTEL::gpu::CacheHint::None,
+          sycl::INTEL::gpu::CacheHint L3H = sycl::INTEL::gpu::CacheHint::None>
+sycl::INTEL::gpu::vector_type_t<Ty, N * NumChannels(Mask)> SYCL_EXTERNAL
+__esimd_flat_read4(sycl::INTEL::gpu::vector_type_t<uint64_t, N> addrs,
+                   sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred = 1);
 
 // flat_write does flat-address scatter
-template <typename Ty, int N, __SEIEE::ChannelMaskType Mask,
-          __SEIEE::CacheHint L1H = __SEIEE::CacheHint::None,
-          __SEIEE::CacheHint L3H = __SEIEE::CacheHint::None>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION void
-__esimd_flat_write4(__SEIEED::vector_type_t<uint64_t, N> addrs,
-                    __SEIEED::vector_type_t<Ty, N * NumChannels(Mask)> vals,
-                    __SEIEED::vector_type_t<uint16_t, N> pred = 1);
+template <typename Ty, int N, sycl::INTEL::gpu::ChannelMaskType Mask,
+          sycl::INTEL::gpu::CacheHint L1H = sycl::INTEL::gpu::CacheHint::None,
+          sycl::INTEL::gpu::CacheHint L3H = sycl::INTEL::gpu::CacheHint::None>
+SYCL_EXTERNAL void __esimd_flat_write4(
+    sycl::INTEL::gpu::vector_type_t<uint64_t, N> addrs,
+    sycl::INTEL::gpu::vector_type_t<Ty, N * NumChannels(Mask)> vals,
+    sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred = 1);
 
 // Low-level surface-based gather. Collects elements located at given offsets in
 // a surface and returns them as a single \ref simd object. Element can be
@@ -160,12 +105,12 @@ __esimd_flat_write4(__SEIEED::vector_type_t<uint64_t, N> addrs,
 // @param elem_offsets - per-element offsets
 //
 template <typename Ty, int N, typename SurfIndAliasTy, int TySizeLog2,
-          __SEIEE::CacheHint L1H = __SEIEE::CacheHint::None,
-          __SEIEE::CacheHint L3H = __SEIEE::CacheHint::None>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION __SEIEED::vector_type_t<Ty, N>
+          sycl::INTEL::gpu::CacheHint L1H = sycl::INTEL::gpu::CacheHint::None,
+          sycl::INTEL::gpu::CacheHint L3H = sycl::INTEL::gpu::CacheHint::None>
+SYCL_EXTERNAL sycl::INTEL::gpu::vector_type_t<Ty, N>
 __esimd_surf_read(int16_t scale, SurfIndAliasTy surf_ind,
                   uint32_t global_offset,
-                  __SEIEED::vector_type_t<uint32_t, N> elem_offsets)
+                  sycl::INTEL::gpu::vector_type_t<uint32_t, N> elem_offsets)
 #ifdef __SYCL_DEVICE_ONLY__
     ;
 #else
@@ -202,13 +147,14 @@ __esimd_surf_read(int16_t scale, SurfIndAliasTy surf_ind,
 // @param vals - values to write
 //
 template <typename Ty, int N, typename SurfIndAliasTy, int TySizeLog2,
-          __SEIEE::CacheHint L1H = __SEIEE::CacheHint::None,
-          __SEIEE::CacheHint L3H = __SEIEE::CacheHint::None>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION void
-__esimd_surf_write(__SEIEED::vector_type_t<uint16_t, N> pred, int16_t scale,
-                   SurfIndAliasTy surf_ind, uint32_t global_offset,
-                   __SEIEED::vector_type_t<uint32_t, N> elem_offsets,
-                   __SEIEED::vector_type_t<Ty, N> vals)
+          sycl::INTEL::gpu::CacheHint L1H = sycl::INTEL::gpu::CacheHint::None,
+          sycl::INTEL::gpu::CacheHint L3H = sycl::INTEL::gpu::CacheHint::None>
+SYCL_EXTERNAL void
+__esimd_surf_write(sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred,
+                   int16_t scale, SurfIndAliasTy surf_ind,
+                   uint32_t global_offset,
+                   sycl::INTEL::gpu::vector_type_t<uint32_t, N> elem_offsets,
+                   sycl::INTEL::gpu::vector_type_t<Ty, N> vals)
 #ifdef __SYCL_DEVICE_ONLY__
     ;
 #else
@@ -224,95 +170,94 @@ __esimd_surf_write(__SEIEED::vector_type_t<uint16_t, N> pred, int16_t scale,
 // correponsing BE intrinsicics parameter order.
 
 // flat_atomic: flat-address atomic
-template <__SEIEE::EsimdAtomicOpType Op, typename Ty, int N,
-          __SEIEE::CacheHint L1H = __SEIEE::CacheHint::None,
-          __SEIEE::CacheHint L3H = __SEIEE::CacheHint::None>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION __SEIEED::vector_type_t<Ty, N>
-__esimd_flat_atomic0(__SEIEED::vector_type_t<uint64_t, N> addrs,
-                     __SEIEED::vector_type_t<uint16_t, N> pred);
+template <sycl::INTEL::gpu::EsimdAtomicOpType Op, typename Ty, int N,
+          sycl::INTEL::gpu::CacheHint L1H = sycl::INTEL::gpu::CacheHint::None,
+          sycl::INTEL::gpu::CacheHint L3H = sycl::INTEL::gpu::CacheHint::None>
+SYCL_EXTERNAL sycl::INTEL::gpu::vector_type_t<Ty, N>
+__esimd_flat_atomic0(sycl::INTEL::gpu::vector_type_t<uint64_t, N> addrs,
+                     sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred);
 
-template <__SEIEE::EsimdAtomicOpType Op, typename Ty, int N,
-          __SEIEE::CacheHint L1H = __SEIEE::CacheHint::None,
-          __SEIEE::CacheHint L3H = __SEIEE::CacheHint::None>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION __SEIEED::vector_type_t<Ty, N>
-__esimd_flat_atomic1(__SEIEED::vector_type_t<uint64_t, N> addrs,
-                     __SEIEED::vector_type_t<Ty, N> src0,
-                     __SEIEED::vector_type_t<uint16_t, N> pred);
+template <sycl::INTEL::gpu::EsimdAtomicOpType Op, typename Ty, int N,
+          sycl::INTEL::gpu::CacheHint L1H = sycl::INTEL::gpu::CacheHint::None,
+          sycl::INTEL::gpu::CacheHint L3H = sycl::INTEL::gpu::CacheHint::None>
+SYCL_EXTERNAL sycl::INTEL::gpu::vector_type_t<Ty, N>
+__esimd_flat_atomic1(sycl::INTEL::gpu::vector_type_t<uint64_t, N> addrs,
+                     sycl::INTEL::gpu::vector_type_t<Ty, N> src0,
+                     sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred);
 
-template <__SEIEE::EsimdAtomicOpType Op, typename Ty, int N,
-          __SEIEE::CacheHint L1H = __SEIEE::CacheHint::None,
-          __SEIEE::CacheHint L3H = __SEIEE::CacheHint::None>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION __SEIEED::vector_type_t<Ty, N>
-__esimd_flat_atomic2(__SEIEED::vector_type_t<uint64_t, N> addrs,
-                     __SEIEED::vector_type_t<Ty, N> src0,
-                     __SEIEED::vector_type_t<Ty, N> src1,
-                     __SEIEED::vector_type_t<uint16_t, N> pred);
+template <sycl::INTEL::gpu::EsimdAtomicOpType Op, typename Ty, int N,
+          sycl::INTEL::gpu::CacheHint L1H = sycl::INTEL::gpu::CacheHint::None,
+          sycl::INTEL::gpu::CacheHint L3H = sycl::INTEL::gpu::CacheHint::None>
+SYCL_EXTERNAL sycl::INTEL::gpu::vector_type_t<Ty, N>
+__esimd_flat_atomic2(sycl::INTEL::gpu::vector_type_t<uint64_t, N> addrs,
+                     sycl::INTEL::gpu::vector_type_t<Ty, N> src0,
+                     sycl::INTEL::gpu::vector_type_t<Ty, N> src1,
+                     sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred);
 
 // esimd_barrier, generic group barrier
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION void __esimd_barrier();
+SYCL_EXTERNAL void __esimd_barrier();
 
 // generic work-group split barrier
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION void
-__esimd_sbarrier(__SEIEE::EsimdSbarrierType flag);
+SYCL_EXTERNAL void __esimd_sbarrier(sycl::INTEL::gpu::EsimdSbarrierType flag);
 
 // slm_fence sets the SLM read/write order
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION void __esimd_slm_fence(uint8_t cntl);
+SYCL_EXTERNAL void __esimd_slm_fence(uint8_t cntl);
 
 // slm_read does SLM gather
 template <typename Ty, int N>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION __SEIEED::vector_type_t<Ty, N>
-__esimd_slm_read(__SEIEED::vector_type_t<uint32_t, N> addrs,
-                 __SEIEED::vector_type_t<uint16_t, N> pred = 1);
+SYCL_EXTERNAL sycl::INTEL::gpu::vector_type_t<Ty, N>
+__esimd_slm_read(sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
+                 sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred = 1);
 
 // slm_write does SLM scatter
 template <typename Ty, int N>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION void
-__esimd_slm_write(__SEIEED::vector_type_t<uint32_t, N> addrs,
-                  __SEIEED::vector_type_t<Ty, N> vals,
-                  __SEIEED::vector_type_t<uint16_t, N> pred = 1);
+SYCL_EXTERNAL void
+__esimd_slm_write(sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
+                  sycl::INTEL::gpu::vector_type_t<Ty, N> vals,
+                  sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred = 1);
 
 // slm_block_read reads a block of data from SLM
 template <typename Ty, int N>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION __SEIEED::vector_type_t<Ty, N>
+SYCL_EXTERNAL sycl::INTEL::gpu::vector_type_t<Ty, N>
 __esimd_slm_block_read(uint32_t addr);
 
 // slm_block_write writes a block of data to SLM
 template <typename Ty, int N>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION void
-__esimd_slm_block_write(uint32_t addr, __SEIEED::vector_type_t<Ty, N> vals);
+SYCL_EXTERNAL void
+__esimd_slm_block_write(uint32_t addr,
+                        sycl::INTEL::gpu::vector_type_t<Ty, N> vals);
 
 // slm_read4 does SLM gather4
-template <typename Ty, int N, __SEIEE::ChannelMaskType Mask>
-SYCL_EXTERNAL
-    SYCL_ESIMD_FUNCTION __SEIEED::vector_type_t<Ty, N * NumChannels(Mask)>
-    __esimd_slm_read4(__SEIEED::vector_type_t<uint32_t, N> addrs,
-                      __SEIEED::vector_type_t<uint16_t, N> pred = 1);
+template <typename Ty, int N, sycl::INTEL::gpu::ChannelMaskType Mask>
+SYCL_EXTERNAL sycl::INTEL::gpu::vector_type_t<Ty, N * NumChannels(Mask)>
+__esimd_slm_read4(sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
+                  sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred = 1);
 
 // slm_write4 does SLM scatter4
-template <typename Ty, int N, __SEIEE::ChannelMaskType Mask>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION void
-__esimd_slm_write4(__SEIEED::vector_type_t<uint32_t, N> addrs,
-                   __SEIEED::vector_type_t<Ty, N * NumChannels(Mask)> vals,
-                   __SEIEED::vector_type_t<uint16_t, N> pred = 1);
+template <typename Ty, int N, sycl::INTEL::gpu::ChannelMaskType Mask>
+SYCL_EXTERNAL void __esimd_slm_write4(
+    sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
+    sycl::INTEL::gpu::vector_type_t<Ty, N * NumChannels(Mask)> vals,
+    sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred = 1);
 
 // slm_atomic: SLM atomic
-template <__SEIEE::EsimdAtomicOpType Op, typename Ty, int N>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION __SEIEED::vector_type_t<Ty, N>
-__esimd_slm_atomic0(__SEIEED::vector_type_t<uint32_t, N> addrs,
-                    __SEIEED::vector_type_t<uint16_t, N> pred);
+template <sycl::INTEL::gpu::EsimdAtomicOpType Op, typename Ty, int N>
+SYCL_EXTERNAL sycl::INTEL::gpu::vector_type_t<Ty, N>
+__esimd_slm_atomic0(sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
+                    sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred);
 
-template <__SEIEE::EsimdAtomicOpType Op, typename Ty, int N>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION __SEIEED::vector_type_t<Ty, N>
-__esimd_slm_atomic1(__SEIEED::vector_type_t<uint32_t, N> addrs,
-                    __SEIEED::vector_type_t<Ty, N> src0,
-                    __SEIEED::vector_type_t<uint16_t, N> pred);
+template <sycl::INTEL::gpu::EsimdAtomicOpType Op, typename Ty, int N>
+SYCL_EXTERNAL sycl::INTEL::gpu::vector_type_t<Ty, N>
+__esimd_slm_atomic1(sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
+                    sycl::INTEL::gpu::vector_type_t<Ty, N> src0,
+                    sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred);
 
-template <__SEIEE::EsimdAtomicOpType Op, typename Ty, int N>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION __SEIEED::vector_type_t<Ty, N>
-__esimd_slm_atomic2(__SEIEED::vector_type_t<uint32_t, N> addrs,
-                    __SEIEED::vector_type_t<Ty, N> src0,
-                    __SEIEED::vector_type_t<Ty, N> src1,
-                    __SEIEED::vector_type_t<uint16_t, N> pred);
+template <sycl::INTEL::gpu::EsimdAtomicOpType Op, typename Ty, int N>
+SYCL_EXTERNAL sycl::INTEL::gpu::vector_type_t<Ty, N>
+__esimd_slm_atomic2(sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
+                    sycl::INTEL::gpu::vector_type_t<Ty, N> src0,
+                    sycl::INTEL::gpu::vector_type_t<Ty, N> src1,
+                    sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred);
 
 // Media block load
 //
@@ -339,7 +284,7 @@ __esimd_slm_atomic2(__SEIEED::vector_type_t<uint32_t, N> addrs,
 // @return the linearized 2D block data read from surface.
 //
 template <typename Ty, int M, int N, typename TACC>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION __SEIEED::vector_type_t<Ty, M * N>
+SYCL_EXTERNAL sycl::INTEL::gpu::vector_type_t<Ty, M * N>
 __esimd_media_block_load(unsigned modififer, TACC handle, unsigned plane,
                          unsigned width, unsigned x, unsigned y);
 
@@ -368,10 +313,10 @@ __esimd_media_block_load(unsigned modififer, TACC handle, unsigned plane,
 // @param vals the linearized 2D block data to be written to surface.
 //
 template <typename Ty, int M, int N, typename TACC>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION void
+SYCL_EXTERNAL void
 __esimd_media_block_store(unsigned modififer, TACC handle, unsigned plane,
                           unsigned width, unsigned x, unsigned y,
-                          __SEIEED::vector_type_t<Ty, M * N> vals);
+                          sycl::INTEL::gpu::vector_type_t<Ty, M * N> vals);
 
 /// \brief esimd_get_value
 ///
@@ -380,8 +325,7 @@ __esimd_media_block_store(unsigned modififer, TACC handle, unsigned plane,
 /// Returns the binding table index value.
 ///
 template <typename SurfIndAliasTy>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION uint32_t
-__esimd_get_value(SurfIndAliasTy sid);
+SYCL_EXTERNAL uint32_t __esimd_get_value(SurfIndAliasTy sid);
 
 /// \brief Raw sends load.
 ///
@@ -416,14 +360,14 @@ __esimd_get_value(SurfIndAliasTy sid);
 ///
 template <typename Ty1, int N1, typename Ty2, int N2, typename Ty3, int N3,
           int N = 16>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION __SEIEED::vector_type_t<Ty1, N1>
+SYCL_EXTERNAL sycl::INTEL::gpu::vector_type_t<Ty1, N1>
 __esimd_raw_sends_load(uint8_t modifier, uint8_t execSize,
-                       __SEIEED::vector_type_t<uint16_t, N> pred,
+                       sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred,
                        uint8_t numSrc0, uint8_t numSrc1, uint8_t numDst,
                        uint8_t sfid, uint32_t exDesc, uint32_t msgDesc,
-                       __SEIEED::vector_type_t<Ty2, N2> msgSrc0,
-                       __SEIEED::vector_type_t<Ty3, N3> msgSrc1,
-                       __SEIEED::vector_type_t<Ty1, N1> msgDst);
+                       sycl::INTEL::gpu::vector_type_t<Ty2, N2> msgSrc0,
+                       sycl::INTEL::gpu::vector_type_t<Ty3, N3> msgSrc1,
+                       sycl::INTEL::gpu::vector_type_t<Ty1, N1> msgDst);
 
 /// \brief Raw send load.
 ///
@@ -452,13 +396,13 @@ __esimd_raw_sends_load(uint8_t modifier, uint8_t execSize,
 /// Returns a simd vector of type Ty1 and size N1.
 ///
 template <typename Ty1, int N1, typename Ty2, int N2, int N = 16>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION __SEIEED::vector_type_t<Ty1, N1>
+SYCL_EXTERNAL sycl::INTEL::gpu::vector_type_t<Ty1, N1>
 __esimd_raw_send_load(uint8_t modifier, uint8_t execSize,
-                      __SEIEED::vector_type_t<uint16_t, N> pred,
+                      sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred,
                       uint8_t numSrc0, uint8_t numDst, uint8_t sfid,
                       uint32_t exDesc, uint32_t msgDesc,
-                      __SEIEED::vector_type_t<Ty2, N2> msgSrc0,
-                      __SEIEED::vector_type_t<Ty1, N1> msgDst);
+                      sycl::INTEL::gpu::vector_type_t<Ty2, N2> msgSrc0,
+                      sycl::INTEL::gpu::vector_type_t<Ty1, N1> msgDst);
 
 /// \brief Raw sends store.
 ///
@@ -485,13 +429,13 @@ __esimd_raw_send_load(uint8_t modifier, uint8_t execSize,
 /// @param msgSrc1 the second source operand of send message.
 ///
 template <typename Ty1, int N1, typename Ty2, int N2, int N = 16>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION void
+SYCL_EXTERNAL void
 __esimd_raw_sends_store(uint8_t modifier, uint8_t execSize,
-                        __SEIEED::vector_type_t<uint16_t, N> pred,
+                        sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred,
                         uint8_t numSrc0, uint8_t numSrc1, uint8_t sfid,
                         uint32_t exDesc, uint32_t msgDesc,
-                        __SEIEED::vector_type_t<Ty1, N1> msgSrc0,
-                        __SEIEED::vector_type_t<Ty2, N2> msgSrc1);
+                        sycl::INTEL::gpu::vector_type_t<Ty1, N1> msgSrc0,
+                        sycl::INTEL::gpu::vector_type_t<Ty2, N2> msgSrc1);
 
 /// \brief Raw send store.
 ///
@@ -513,12 +457,12 @@ __esimd_raw_sends_store(uint8_t modifier, uint8_t execSize,
 /// @param msgSrc0 the first source operand of send message.
 ///
 template <typename Ty1, int N1, int N = 16>
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION void
+SYCL_EXTERNAL void
 __esimd_raw_send_store(uint8_t modifier, uint8_t execSize,
-                       __SEIEED::vector_type_t<uint16_t, N> pred,
+                       sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred,
                        uint8_t numSrc0, uint8_t sfid, uint32_t exDesc,
                        uint32_t msgDesc,
-                       __SEIEED::vector_type_t<Ty1, N1> msgSrc0);
+                       sycl::INTEL::gpu::vector_type_t<Ty1, N1> msgSrc0);
 #ifndef __SYCL_DEVICE_ONLY__
 
 #define __SYCL_EXPLICIT_SIMD_PLUGIN__
@@ -530,18 +474,22 @@ namespace cm_support {
 } // namespace cm_support
 #include "cmrt_if_defs.hpp"
 
-#include <sycl/ext/intel/experimental/esimd/detail/emu/esimdcpu_device_interface.hpp>
+#include <CL/sycl/INTEL/esimd/detail/emu/esimdcpu_device_interface.hpp>
 #include <CL/sycl/backend_types.hpp>
 #include <CL/sycl/detail/pi.hpp>
 
-template <typename Ty, int N, int NumBlk, __SEIEE::CacheHint L1H,
-          __SEIEE::CacheHint L3H>
-inline __SEIEED::vector_type_t<Ty, N * __SEIEED::ElemsPerAddrDecoding(NumBlk)>
-__esimd_flat_read(__SEIEED::vector_type_t<uint64_t, N> addrs, int ElemsPerAddr,
-                  __SEIEED::vector_type_t<uint16_t, N> pred) {
-  auto NumBlkDecoded = __SEIEED::ElemsPerAddrDecoding(NumBlk);
-  __SEIEED::vector_type_t<Ty, N * __SEIEED::ElemsPerAddrDecoding(NumBlk)> V;
-  ElemsPerAddr = __SEIEED::ElemsPerAddrDecoding(ElemsPerAddr);
+template <typename Ty, int N, int NumBlk, sycl::INTEL::gpu::CacheHint L1H,
+          sycl::INTEL::gpu::CacheHint L3H>
+inline sycl::INTEL::gpu::vector_type_t<
+    Ty, N * sycl::INTEL::gpu::ElemsPerAddrDecoding(NumBlk)>
+__esimd_flat_read(sycl::INTEL::gpu::vector_type_t<uint64_t, N> addrs,
+                  int ElemsPerAddr,
+                  sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
+  auto NumBlkDecoded = sycl::INTEL::gpu::ElemsPerAddrDecoding(NumBlk);
+  sycl::INTEL::gpu::vector_type_t<
+      Ty, N * sycl::INTEL::gpu::ElemsPerAddrDecoding(NumBlk)>
+      V;
+  ElemsPerAddr = sycl::INTEL::gpu::ElemsPerAddrDecoding(ElemsPerAddr);
 
   for (int I = 0; I < N; I++) {
     if (pred[I]) {
@@ -560,12 +508,12 @@ __esimd_flat_read(__SEIEED::vector_type_t<uint64_t, N> addrs, int ElemsPerAddr,
   return V;
 }
 
-template <typename Ty, int N, __SEIEE::ChannelMaskType Mask,
-          __SEIEE::CacheHint L1H, __SEIEE::CacheHint L3H>
-inline __SEIEED::vector_type_t<Ty, N * NumChannels(Mask)>
-__esimd_flat_read4(__SEIEED::vector_type_t<uint64_t, N> addrs,
-                   __SEIEED::vector_type_t<uint16_t, N> pred) {
-  __SEIEED::vector_type_t<Ty, N * NumChannels(Mask)> V;
+template <typename Ty, int N, sycl::INTEL::gpu::ChannelMaskType Mask,
+          sycl::INTEL::gpu::CacheHint L1H, sycl::INTEL::gpu::CacheHint L3H>
+inline sycl::INTEL::gpu::vector_type_t<Ty, N * NumChannels(Mask)>
+__esimd_flat_read4(sycl::INTEL::gpu::vector_type_t<uint64_t, N> addrs,
+                   sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
+  sycl::INTEL::gpu::vector_type_t<Ty, N * NumChannels(Mask)> V;
   unsigned int Next = 0;
 
   if constexpr (HasR(Mask)) {
@@ -608,15 +556,17 @@ __esimd_flat_read4(__SEIEED::vector_type_t<uint64_t, N> addrs,
   return V;
 }
 
-template <typename Ty, int N, int NumBlk, __SEIEE::CacheHint L1H,
-          __SEIEE::CacheHint L3H>
-inline void __esimd_flat_write(
-    __SEIEED::vector_type_t<uint64_t, N> addrs,
-    __SEIEED::vector_type_t<Ty, N * __SEIEED::ElemsPerAddrDecoding(NumBlk)>
-        vals,
-    int ElemsPerAddr, __SEIEED::vector_type_t<uint16_t, N> pred) {
-  auto NumBlkDecoded = __SEIEED::ElemsPerAddrDecoding(NumBlk);
-  ElemsPerAddr = __SEIEED::ElemsPerAddrDecoding(ElemsPerAddr);
+template <typename Ty, int N, int NumBlk, sycl::INTEL::gpu::CacheHint L1H,
+          sycl::INTEL::gpu::CacheHint L3H>
+inline void
+__esimd_flat_write(sycl::INTEL::gpu::vector_type_t<uint64_t, N> addrs,
+                   sycl::INTEL::gpu::vector_type_t<
+                       Ty, N * sycl::INTEL::gpu::ElemsPerAddrDecoding(NumBlk)>
+                       vals,
+                   int ElemsPerAddr,
+                   sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
+  auto NumBlkDecoded = sycl::INTEL::gpu::ElemsPerAddrDecoding(NumBlk);
+  ElemsPerAddr = sycl::INTEL::gpu::ElemsPerAddrDecoding(ElemsPerAddr);
 
   for (int I = 0; I < N; I++) {
     if (pred[I]) {
@@ -634,13 +584,13 @@ inline void __esimd_flat_write(
   }
 }
 
-template <typename Ty, int N, __SEIEE::ChannelMaskType Mask,
-          __SEIEE::CacheHint L1H, __SEIEE::CacheHint L3H>
-inline void
-__esimd_flat_write4(__SEIEED::vector_type_t<uint64_t, N> addrs,
-                    __SEIEED::vector_type_t<Ty, N * NumChannels(Mask)> vals,
-                    __SEIEED::vector_type_t<uint16_t, N> pred) {
-  __SEIEED::vector_type_t<Ty, N * NumChannels(Mask)> V;
+template <typename Ty, int N, sycl::INTEL::gpu::ChannelMaskType Mask,
+          sycl::INTEL::gpu::CacheHint L1H, sycl::INTEL::gpu::CacheHint L3H>
+inline void __esimd_flat_write4(
+    sycl::INTEL::gpu::vector_type_t<uint64_t, N> addrs,
+    sycl::INTEL::gpu::vector_type_t<Ty, N * NumChannels(Mask)> vals,
+    sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
+  sycl::INTEL::gpu::vector_type_t<Ty, N * NumChannels(Mask)> V;
   unsigned int Next = 0;
 
   if constexpr (HasR(Mask)) {
@@ -681,10 +631,11 @@ __esimd_flat_write4(__SEIEED::vector_type_t<uint64_t, N> addrs,
   }
 }
 
-template <typename Ty, int N, __SEIEE::CacheHint L1H, __SEIEE::CacheHint L3H>
-inline __SEIEED::vector_type_t<Ty, N>
+template <typename Ty, int N, sycl::INTEL::gpu::CacheHint L1H,
+          sycl::INTEL::gpu::CacheHint L3H>
+inline sycl::INTEL::gpu::vector_type_t<Ty, N>
 __esimd_flat_block_read_unaligned(uint64_t addr) {
-  __SEIEED::vector_type_t<Ty, N> V;
+  sycl::INTEL::gpu::vector_type_t<Ty, N> V;
 
   for (int I = 0; I < N; I++) {
     Ty *Addr = reinterpret_cast<Ty *>(addr + I * sizeof(Ty));
@@ -693,9 +644,11 @@ __esimd_flat_block_read_unaligned(uint64_t addr) {
   return V;
 }
 
-template <typename Ty, int N, __SEIEE::CacheHint L1H, __SEIEE::CacheHint L3H>
-inline void __esimd_flat_block_write(uint64_t addr,
-                                     __SEIEED::vector_type_t<Ty, N> vals) {
+template <typename Ty, int N, sycl::INTEL::gpu::CacheHint L1H,
+          sycl::INTEL::gpu::CacheHint L3H>
+inline void
+__esimd_flat_block_write(uint64_t addr,
+                         sycl::INTEL::gpu::vector_type_t<Ty, N> vals) {
   for (int I = 0; I < N; I++) {
     Ty *Addr = reinterpret_cast<Ty *>(addr + I * sizeof(Ty));
     *Addr = vals[I];
@@ -703,10 +656,10 @@ inline void __esimd_flat_block_write(uint64_t addr,
 }
 
 template <typename Ty, int M, int N, typename TACC>
-inline __SEIEED::vector_type_t<Ty, M * N>
+inline sycl::INTEL::gpu::vector_type_t<Ty, M * N>
 __esimd_media_block_load(unsigned modififer, TACC handle, unsigned plane,
                          unsigned width, unsigned x, unsigned y) {
-  __SEIEED::vector_type_t<Ty, M * N> vals;
+  sycl::INTEL::gpu::vector_type_t<Ty, M * N> vals;
 
   sycl::detail::ESIMDDeviceInterface *I = sycl::detail::getESIMDDeviceInterface();
 
@@ -812,10 +765,10 @@ __esimd_media_block_load(unsigned modififer, TACC handle, unsigned plane,
 }
 
 template <typename Ty, int M, int N, typename TACC>
-inline void __esimd_media_block_store(unsigned modififer, TACC handle,
-                                      unsigned plane, unsigned width,
-                                      unsigned x, unsigned y,
-                                      __SEIEED::vector_type_t<Ty, M * N> vals) {
+inline void
+__esimd_media_block_store(unsigned modififer, TACC handle, unsigned plane,
+                          unsigned width, unsigned x, unsigned y,
+                          sycl::INTEL::gpu::vector_type_t<Ty, M * N> vals) {
   sycl::detail::ESIMDDeviceInterface *I = sycl::detail::getESIMDDeviceInterface();
 
   _pi_image *img =
@@ -868,7 +821,7 @@ inline void __esimd_media_block_store(unsigned modififer, TACC handle,
 }
 
 template <typename Ty, int N>
-inline uint16_t __esimd_any(__SEIEED::vector_type_t<Ty, N> src) {
+inline uint16_t __esimd_any(sycl::INTEL::gpu::vector_type_t<Ty, N> src) {
   for (unsigned int i = 0; i != N; i++) {
     if (src[i] != 0)
       return 1;
@@ -877,7 +830,7 @@ inline uint16_t __esimd_any(__SEIEED::vector_type_t<Ty, N> src) {
 }
 
 template <typename Ty, int N>
-inline uint16_t __esimd_all(__SEIEED::vector_type_t<Ty, N> src) {
+inline uint16_t __esimd_all(sycl::INTEL::gpu::vector_type_t<Ty, N> src) {
   for (unsigned int i = 0; i != N; i++) {
     if (src[i] == 0)
       return 0;
@@ -886,10 +839,10 @@ inline uint16_t __esimd_all(__SEIEED::vector_type_t<Ty, N> src) {
 }
 
 template <typename Ty, int N>
-inline __SEIEED::vector_type_t<Ty, N>
-__esimd_dp4(__SEIEED::vector_type_t<Ty, N> v1,
-            __SEIEED::vector_type_t<Ty, N> v2) {
-  __SEIEED::vector_type_t<Ty, N> retv;
+inline sycl::INTEL::gpu::vector_type_t<Ty, N>
+__esimd_dp4(sycl::INTEL::gpu::vector_type_t<Ty, N> v1,
+            sycl::INTEL::gpu::vector_type_t<Ty, N> v2) {
+  sycl::INTEL::gpu::vector_type_t<Ty, N> retv;
   for (auto i = 0; i != N; i += 4) {
     Ty dp = (v1[i] * v2[i]) + (v1[i + 1] * v2[i + 1]) +
             (v1[i + 2] * v2[i + 2]) + (v1[i + 3] * v2[i + 3]);
@@ -913,7 +866,7 @@ inline void __esimd_barrier() {
   I->cm_barrier_ptr();
 }
 
-inline void __esimd_sbarrier(sycl::ext::intel::experimental::esimd::EsimdSbarrierType flag) {
+inline void __esimd_sbarrier(sycl::INTEL::gpu::EsimdSbarrierType flag) {
   sycl::detail::ESIMDDeviceInterface *I = sycl::detail::getESIMDDeviceInterface();
 
   I->cm_sbarrier_ptr((uint)flag);
@@ -922,10 +875,10 @@ inline void __esimd_sbarrier(sycl::ext::intel::experimental::esimd::EsimdSbarrie
 inline void __esimd_slm_fence(uint8_t cntl) {}
 
 template <typename Ty, int N>
-inline __SEIEED::vector_type_t<Ty, N>
-__esimd_slm_read(__SEIEED::vector_type_t<uint32_t, N> addrs,
-                 __SEIEED::vector_type_t<uint16_t, N> pred) {
-  __SEIEED::vector_type_t<Ty, N> retv;
+inline sycl::INTEL::gpu::vector_type_t<Ty, N>
+__esimd_slm_read(sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
+                 sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
+  sycl::INTEL::gpu::vector_type_t<Ty, N> retv;
   sycl::detail::ESIMDDeviceInterface *I = sycl::detail::getESIMDDeviceInterface();
 
   char *SlmBase = I->__cm_emu_get_slm_ptr();
@@ -940,9 +893,10 @@ __esimd_slm_read(__SEIEED::vector_type_t<uint32_t, N> addrs,
 
 // slm_write does SLM scatter
 template <typename Ty, int N>
-inline void __esimd_slm_write(__SEIEED::vector_type_t<uint32_t, N> addrs,
-                              __SEIEED::vector_type_t<Ty, N> vals,
-                              __SEIEED::vector_type_t<uint16_t, N> pred) {
+inline void
+__esimd_slm_write(sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
+                  sycl::INTEL::gpu::vector_type_t<Ty, N> vals,
+                  sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
   sycl::detail::ESIMDDeviceInterface *I = sycl::detail::getESIMDDeviceInterface();
 
   char *SlmBase = I->__cm_emu_get_slm_ptr();
@@ -956,8 +910,9 @@ inline void __esimd_slm_write(__SEIEED::vector_type_t<uint32_t, N> addrs,
 
 // slm_block_read reads a block of data from SLM
 template <typename Ty, int N>
-inline __SEIEED::vector_type_t<Ty, N> __esimd_slm_block_read(uint32_t addr) {
-  __SEIEED::vector_type_t<Ty, N> retv;
+inline sycl::INTEL::gpu::vector_type_t<Ty, N>
+__esimd_slm_block_read(uint32_t addr) {
+  sycl::INTEL::gpu::vector_type_t<Ty, N> retv;
   sycl::detail::ESIMDDeviceInterface *I = sycl::detail::getESIMDDeviceInterface();
   char *SlmBase = I->__cm_emu_get_slm_ptr();
   addr <<= 4;
@@ -971,8 +926,9 @@ inline __SEIEED::vector_type_t<Ty, N> __esimd_slm_block_read(uint32_t addr) {
 
 // slm_block_write writes a block of data to SLM
 template <typename Ty, int N>
-inline void __esimd_slm_block_write(uint32_t addr,
-                                    __SEIEED::vector_type_t<Ty, N> vals) {
+inline void
+__esimd_slm_block_write(uint32_t addr,
+                        sycl::INTEL::gpu::vector_type_t<Ty, N> vals) {
   sycl::detail::ESIMDDeviceInterface *I = sycl::detail::getESIMDDeviceInterface();
   char *SlmBase = I->__cm_emu_get_slm_ptr();
   addr <<= 4;
@@ -984,11 +940,11 @@ inline void __esimd_slm_block_write(uint32_t addr,
 }
 
 // slm_read4 does SLM gather4
-template <typename Ty, int N, __SEIEE::ChannelMaskType Mask>
-inline __SEIEED::vector_type_t<Ty, N * NumChannels(Mask)>
-__esimd_slm_read4(__SEIEED::vector_type_t<uint32_t, N> addrs,
-                  __SEIEED::vector_type_t<uint16_t, N> pred) {
-  __SEIEED::vector_type_t<Ty, N * NumChannels(Mask)> retv;
+template <typename Ty, int N, sycl::INTEL::gpu::ChannelMaskType Mask>
+inline sycl::INTEL::gpu::vector_type_t<Ty, N * NumChannels(Mask)>
+__esimd_slm_read4(sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
+                  sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
+  sycl::INTEL::gpu::vector_type_t<Ty, N * NumChannels(Mask)> retv;
   sycl::detail::ESIMDDeviceInterface *I = sycl::detail::getESIMDDeviceInterface();
   char *ReadBase = I->__cm_emu_get_slm_ptr();
 
@@ -1038,11 +994,11 @@ __esimd_slm_read4(__SEIEED::vector_type_t<uint32_t, N> addrs,
 }
 
 // slm_write4 does SLM scatter4
-template <typename Ty, int N, __SEIEE::ChannelMaskType Mask>
-inline void
-__esimd_slm_write4(__SEIEED::vector_type_t<uint32_t, N> addrs,
-                   __SEIEED::vector_type_t<Ty, N * NumChannels(Mask)> vals,
-                   __SEIEED::vector_type_t<uint16_t, N> pred) {
+template <typename Ty, int N, sycl::INTEL::gpu::ChannelMaskType Mask>
+inline void __esimd_slm_write4(
+    sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
+    sycl::INTEL::gpu::vector_type_t<Ty, N * NumChannels(Mask)> vals,
+    sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
   sycl::detail::ESIMDDeviceInterface *I = sycl::detail::getESIMDDeviceInterface();
   char *WriteBase = I->__cm_emu_get_slm_ptr();
 
@@ -1091,11 +1047,11 @@ __esimd_slm_write4(__SEIEED::vector_type_t<uint32_t, N> addrs,
 }
 
 // slm_atomic: SLM atomic
-template <__SEIEE::EsimdAtomicOpType Op, typename Ty, int N>
-inline __SEIEED::vector_type_t<Ty, N>
-__esimd_slm_atomic0(__SEIEED::vector_type_t<uint32_t, N> addrs,
-                    __SEIEED::vector_type_t<uint16_t, N> pred) {
-  __SEIEED::vector_type_t<Ty, N> retv;
+template <sycl::INTEL::gpu::EsimdAtomicOpType Op, typename Ty, int N>
+inline sycl::INTEL::gpu::vector_type_t<Ty, N>
+__esimd_slm_atomic0(sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
+                    sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
+  sycl::INTEL::gpu::vector_type_t<Ty, N> retv;
   sycl::detail::ESIMDDeviceInterface *I = sycl::detail::getESIMDDeviceInterface();
   char *WriteBase = I->__cm_emu_get_slm_ptr();
 
@@ -1104,7 +1060,7 @@ __esimd_slm_atomic0(__SEIEED::vector_type_t<uint32_t, N> addrs,
       Ty *p = reinterpret_cast<Ty *>(addrs[i] + WriteBase);
 
       switch (Op) {
-      case __SEIEE::EsimdAtomicOpType::ATOMIC_INC:
+      case sycl::INTEL::gpu::EsimdAtomicOpType::ATOMIC_INC:
         retv[i] = atomic_add_fetch<Ty>(p, 1);
         break;
       default:
@@ -1115,48 +1071,48 @@ __esimd_slm_atomic0(__SEIEED::vector_type_t<uint32_t, N> addrs,
   return retv;
 }
 
-template <__SEIEE::EsimdAtomicOpType Op, typename Ty, int N>
-inline __SEIEED::vector_type_t<Ty, N>
-__esimd_slm_atomic1(__SEIEED::vector_type_t<uint32_t, N> addrs,
-                    __SEIEED::vector_type_t<Ty, N> src0,
-                    __SEIEED::vector_type_t<uint16_t, N> pred) {
-  __SEIEED::vector_type_t<Ty, N> retv;
+template <sycl::INTEL::gpu::EsimdAtomicOpType Op, typename Ty, int N>
+inline sycl::INTEL::gpu::vector_type_t<Ty, N>
+__esimd_slm_atomic1(sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
+                    sycl::INTEL::gpu::vector_type_t<Ty, N> src0,
+                    sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
+  sycl::INTEL::gpu::vector_type_t<Ty, N> retv;
   return retv;
 }
 
-template <__SEIEE::EsimdAtomicOpType Op, typename Ty, int N>
-inline __SEIEED::vector_type_t<Ty, N>
-__esimd_slm_atomic2(__SEIEED::vector_type_t<uint32_t, N> addrs,
-                    __SEIEED::vector_type_t<Ty, N> src0,
-                    __SEIEED::vector_type_t<Ty, N> src1,
-                    __SEIEED::vector_type_t<uint16_t, N> pred) {
-  __SEIEED::vector_type_t<Ty, N> retv;
+template <sycl::INTEL::gpu::EsimdAtomicOpType Op, typename Ty, int N>
+inline sycl::INTEL::gpu::vector_type_t<Ty, N>
+__esimd_slm_atomic2(sycl::INTEL::gpu::vector_type_t<uint32_t, N> addrs,
+                    sycl::INTEL::gpu::vector_type_t<Ty, N> src0,
+                    sycl::INTEL::gpu::vector_type_t<Ty, N> src1,
+                    sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
+  sycl::INTEL::gpu::vector_type_t<Ty, N> retv;
   return retv;
 }
 
-template <__SEIEE::EsimdAtomicOpType Op, typename Ty, int N,
-          __SEIEE::CacheHint L1H, __SEIEE::CacheHint L3H>
-inline __SEIEED::vector_type_t<Ty, N>
-__esimd_flat_atomic0(__SEIEED::vector_type_t<uint64_t, N> addrs,
-                     __SEIEED::vector_type_t<uint16_t, N> pred) {
-  __SEIEED::vector_type_t<Ty, N> retv;
+template <sycl::INTEL::gpu::EsimdAtomicOpType Op, typename Ty, int N,
+          sycl::INTEL::gpu::CacheHint L1H, sycl::INTEL::gpu::CacheHint L3H>
+inline sycl::INTEL::gpu::vector_type_t<Ty, N>
+__esimd_flat_atomic0(sycl::INTEL::gpu::vector_type_t<uint64_t, N> addrs,
+                     sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
+  sycl::INTEL::gpu::vector_type_t<Ty, N> retv;
   return retv;
 }
 
-template <__SEIEE::EsimdAtomicOpType Op, typename Ty, int N,
-          __SEIEE::CacheHint L1H, __SEIEE::CacheHint L3H>
-inline __SEIEED::vector_type_t<Ty, N>
-__esimd_flat_atomic1(__SEIEED::vector_type_t<uint64_t, N> addrs,
-                     __SEIEED::vector_type_t<Ty, N> src0,
-                     __SEIEED::vector_type_t<uint16_t, N> pred) {
-  __SEIEED::vector_type_t<Ty, N> retv;
+template <sycl::INTEL::gpu::EsimdAtomicOpType Op, typename Ty, int N,
+          sycl::INTEL::gpu::CacheHint L1H, sycl::INTEL::gpu::CacheHint L3H>
+inline sycl::INTEL::gpu::vector_type_t<Ty, N>
+__esimd_flat_atomic1(sycl::INTEL::gpu::vector_type_t<uint64_t, N> addrs,
+                     sycl::INTEL::gpu::vector_type_t<Ty, N> src0,
+                     sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
+  sycl::INTEL::gpu::vector_type_t<Ty, N> retv;
 
   for (int i = 0; i < N; i++) {
     if (pred[i]) {
       Ty *p = reinterpret_cast<Ty *>(addrs[i]);
 
       switch (Op) {
-      case __SEIEE::EsimdAtomicOpType::ATOMIC_ADD:
+      case sycl::INTEL::gpu::EsimdAtomicOpType::ATOMIC_ADD:
         retv[i] = atomic_add_fetch<Ty>(p, src0[i]);
         break;
       default:
@@ -1168,21 +1124,21 @@ __esimd_flat_atomic1(__SEIEED::vector_type_t<uint64_t, N> addrs,
   return retv;
 }
 
-template <__SEIEE::EsimdAtomicOpType Op, typename Ty, int N,
-          __SEIEE::CacheHint L1H, __SEIEE::CacheHint L3H>
-inline __SEIEED::vector_type_t<Ty, N>
-__esimd_flat_atomic2(__SEIEED::vector_type_t<uint64_t, N> addrs,
-                     __SEIEED::vector_type_t<Ty, N> src0,
-                     __SEIEED::vector_type_t<Ty, N> src1,
-                     __SEIEED::vector_type_t<uint16_t, N> pred) {
-  __SEIEED::vector_type_t<Ty, N> retv;
+template <sycl::INTEL::gpu::EsimdAtomicOpType Op, typename Ty, int N,
+          sycl::INTEL::gpu::CacheHint L1H, sycl::INTEL::gpu::CacheHint L3H>
+inline sycl::INTEL::gpu::vector_type_t<Ty, N>
+__esimd_flat_atomic2(sycl::INTEL::gpu::vector_type_t<uint64_t, N> addrs,
+                     sycl::INTEL::gpu::vector_type_t<Ty, N> src0,
+                     sycl::INTEL::gpu::vector_type_t<Ty, N> src1,
+                     sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred) {
+  sycl::INTEL::gpu::vector_type_t<Ty, N> retv;
   return retv;
 }
 
 template <typename Ty, int N, typename SurfIndAliasTy>
-inline __SEIEED::vector_type_t<Ty, N>
+inline sycl::INTEL::gpu::vector_type_t<Ty, N>
 __esimd_block_read(SurfIndAliasTy surf_ind, uint32_t offset) {
-  __SEIEED::vector_type_t<Ty, N> retv;
+  sycl::INTEL::gpu::vector_type_t<Ty, N> retv;
   sycl::detail::ESIMDDeviceInterface *I = sycl::detail::getESIMDDeviceInterface();
   _pi_buffer *buf =
       static_cast<_pi_buffer *>(static_cast<void *>(surf_ind.get_pointer()));
@@ -1208,7 +1164,7 @@ __esimd_block_read(SurfIndAliasTy surf_ind, uint32_t offset) {
 
 template <typename Ty, int N, typename SurfIndAliasTy>
 inline void __esimd_block_write(SurfIndAliasTy surf_ind, uint32_t offset,
-                                __SEIEED::vector_type_t<Ty, N> vals) {
+                                sycl::INTEL::gpu::vector_type_t<Ty, N> vals) {
   sycl::detail::ESIMDDeviceInterface *I = sycl::detail::getESIMDDeviceInterface();
   _pi_buffer *buf =
       static_cast<_pi_buffer *>(static_cast<void *>(surf_ind.get_pointer()));
@@ -1280,14 +1236,14 @@ inline uint32_t __esimd_get_value(AccessorTy acc) {
 ///
 template <typename Ty1, int N1, typename Ty2, int N2, typename Ty3, int N3,
           int N>
-inline __SEIEED::vector_type_t<Ty1, N1>
+inline sycl::INTEL::gpu::vector_type_t<Ty1, N1>
 __esimd_raw_sends_load(uint8_t modifier, uint8_t execSize,
-                       __SEIEED::vector_type_t<uint16_t, N> pred,
+                       sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred,
                        uint8_t numSrc0, uint8_t numSrc1, uint8_t numDst,
                        uint8_t sfid, uint32_t exDesc, uint32_t msgDesc,
-                       __SEIEED::vector_type_t<Ty2, N2> msgSrc0,
-                       __SEIEED::vector_type_t<Ty3, N3> msgSrc1,
-                       __SEIEED::vector_type_t<Ty1, N1> msgDst) {
+                       sycl::INTEL::gpu::vector_type_t<Ty2, N2> msgSrc0,
+                       sycl::INTEL::gpu::vector_type_t<Ty3, N3> msgSrc1,
+                       sycl::INTEL::gpu::vector_type_t<Ty1, N1> msgDst) {
   throw cl::sycl::feature_not_supported();
   return 0;
 }
@@ -1319,13 +1275,13 @@ __esimd_raw_sends_load(uint8_t modifier, uint8_t execSize,
 /// Returns a simd vector of type Ty1 and size N1.
 ///
 template <typename Ty1, int N1, typename Ty2, int N2, int N>
-inline __SEIEED::vector_type_t<Ty1, N1>
+inline sycl::INTEL::gpu::vector_type_t<Ty1, N1>
 __esimd_raw_send_load(uint8_t modifier, uint8_t execSize,
-                      __SEIEED::vector_type_t<uint16_t, N> pred,
+                      sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred,
                       uint8_t numSrc0, uint8_t numDst, uint8_t sfid,
                       uint32_t exDesc, uint32_t msgDesc,
-                      __SEIEED::vector_type_t<Ty2, N2> msgSrc0,
-                      __SEIEED::vector_type_t<Ty1, N1> msgDst) {
+                      sycl::INTEL::gpu::vector_type_t<Ty2, N2> msgSrc0,
+                      sycl::INTEL::gpu::vector_type_t<Ty1, N1> msgDst) {
   throw cl::sycl::feature_not_supported();
   return 0;
 }
@@ -1355,13 +1311,13 @@ __esimd_raw_send_load(uint8_t modifier, uint8_t execSize,
 /// @param msgSrc1 the second source operand of send message.
 ///
 template <typename Ty1, int N1, typename Ty2, int N2, int N>
-inline void __esimd_raw_sends_store(uint8_t modifier, uint8_t execSize,
-                                    __SEIEED::vector_type_t<uint16_t, N> pred,
-                                    uint8_t numSrc0, uint8_t numSrc1,
-                                    uint8_t sfid, uint32_t exDesc,
-                                    uint32_t msgDesc,
-                                    __SEIEED::vector_type_t<Ty1, N1> msgSrc0,
-                                    __SEIEED::vector_type_t<Ty2, N2> msgSrc1) {
+inline void
+__esimd_raw_sends_store(uint8_t modifier, uint8_t execSize,
+                        sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred,
+                        uint8_t numSrc0, uint8_t numSrc1, uint8_t sfid,
+                        uint32_t exDesc, uint32_t msgDesc,
+                        sycl::INTEL::gpu::vector_type_t<Ty1, N1> msgSrc0,
+                        sycl::INTEL::gpu::vector_type_t<Ty2, N2> msgSrc1) {
   throw cl::sycl::feature_not_supported();
 }
 
@@ -1385,15 +1341,13 @@ inline void __esimd_raw_sends_store(uint8_t modifier, uint8_t execSize,
 /// @param msgSrc0 the first source operand of send message.
 ///
 template <typename Ty1, int N1, int N>
-inline void __esimd_raw_send_store(uint8_t modifier, uint8_t execSize,
-                                   __SEIEED::vector_type_t<uint16_t, N> pred,
-                                   uint8_t numSrc0, uint8_t sfid,
-                                   uint32_t exDesc, uint32_t msgDesc,
-                                   __SEIEED::vector_type_t<Ty1, N1> msgSrc0) {
+inline void
+__esimd_raw_send_store(uint8_t modifier, uint8_t execSize,
+                       sycl::INTEL::gpu::vector_type_t<uint16_t, N> pred,
+                       uint8_t numSrc0, uint8_t sfid, uint32_t exDesc,
+                       uint32_t msgDesc,
+                       sycl::INTEL::gpu::vector_type_t<Ty1, N1> msgSrc0) {
   throw cl::sycl::feature_not_supported();
 }
 
 #endif // __SYCL_DEVICE_ONLY__
-
-#undef __SEIEED
-#undef __SEIEE

@@ -23,6 +23,10 @@
 
 #include <malloc.h>
 
+namespace cm_support {
+#include <cm_rt.h>
+} // namespace cm_support
+
 template <class To, class From> To pi_cast(From Value) {
   // TODO: see if more sanity checks are possible.
   assert(sizeof(From) == sizeof(To));
@@ -43,4 +47,5 @@ template <> uint32_t pi_cast(uint64_t Value) {
   std::terminate();
 }
 
-#include <CL/sycl/INTEL/esimd/detail/emu/esimdcpu_device_interface.hpp>
+#include <sycl/ext/intel/experimental/esimd/detail/cmrt_if_defs.hpp>
+#include <sycl/ext/intel/experimental/esimd/detail/emu/esimdcpu_device_interface.hpp>

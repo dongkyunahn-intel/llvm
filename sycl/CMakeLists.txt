@@ -271,6 +271,15 @@ if(SYCL_BUILD_PI_CUDA)
   list(APPEND SYCL_TOOLCHAIN_DEPLOY_COMPONENTS libspirv-builtins pi_cuda)
 endif()
 
+if (SYCL_BUILD_PI_ESIMD_CPU)
+  list(APPEND SYCL_TOOLCHAIN_DEPLOY_COMPONENTS libcmrt-headers)
+  if (MSVC)
+    list(APPEND SYCL_TOOLCHAIN_DEPLOY_COMPONENTS libcmrt-libs libcmrt-dlls)
+  else()
+    list(APPEND SYCL_TOOLCHAIN_DEPLOY_COMPONENTS libcmrt-sos)
+  endif()
+endif()
+
 # Use it as fake dependency in order to force another command(s) to execute.
 add_custom_command(OUTPUT __force_it
   COMMAND "${CMAKE_COMMAND}" -E echo
