@@ -704,8 +704,9 @@ template <int NDims, typename ArgTy> struct InvokeImpl {
   static void invoke(void *fptr, const size_t *GlobalWorkOffset,
                      const size_t *GlobalWorkSize,
                      const size_t *LocalWorkSize) {
+    const size_t LocalWorkSz[] = {1,1,1};
     if (isNull(NDims, LocalWorkSize)) {
-      LocalWorkSize = GlobalWorkSize;
+      LocalWorkSize = LocalWorkSz;
     }
 
     auto GlobalSize = get_range(GlobalWorkSize);
