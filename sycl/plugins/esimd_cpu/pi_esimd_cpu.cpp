@@ -1802,7 +1802,8 @@ piEnqueueKernelLaunch(pi_queue Queue, pi_kernel Kernel, pi_uint32 WorkDim,
     return PI_SUCCESS;
 
   default:
-    assert(false);
+    DIE_NO_IMPLEMENTATION;
+    return PI_ERROR_UNKNOWN;
   }
 }
 
