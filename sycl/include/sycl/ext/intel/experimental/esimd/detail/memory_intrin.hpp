@@ -1057,7 +1057,7 @@ inline void __esimd_barrier() {
 inline void __esimd_sbarrier(sycl::ext::intel::experimental::esimd::EsimdSbarrierType flag) {
   sycl::detail::ESIMDDeviceInterface *I = sycl::detail::getESIMDDeviceInterface();
 
-  I->cm_sbarrier_ptr((uint)flag);
+  I->cm_sbarrier_ptr((uint32_t)flag);
 }
 
 inline void __esimd_slm_fence(uint8_t cntl) {}
