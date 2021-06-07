@@ -31,8 +31,7 @@ ExternalProject_Add(level-zero-loader_esimd_cpu
   GIT_TAG           v1.0.22
   BINARY_DIR        ${CMAKE_CURRENT_BINARY_DIR}/level-zero-loader_build
   INSTALL_DIR       ${CMAKE_CURRENT_BINARY_DIR}/level-zero-loader_install
-  CMAKE_ARGS        -DOpenCL_INCLUDE_DIR=${OpenCL_INCLUDE_DIRS}
-                    -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+  CMAKE_ARGS        -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
                     -DCMAKE_INSTALL_LIBDIR:PATH=lib${LLVM_LIBDIR_SUFFIX}
                     ${AUX_CMAKE_FLAGS}
   STEP_TARGETS      configure,build,install
@@ -78,7 +77,7 @@ if (DEFINED CM_LOCAL_SOURCE_DIR)
       CMAKE_ARGS        -DLIBVA_INSTALL_PATH=${CMAKE_CURRENT_BINARY_DIR}/libva_install
                         -DLevelZero_INCLUDE_DIR=${CMAKE_CURRENT_BINARY_DIR}/level-zero-loader_install/include
                         -DLevelZero_LIBRARY=${CMAKE_CURRENT_BINARY_DIR}/level-zero-loader_install/lib
-                        -DOpenCLHeaders_INCLUDE_DIR=${OpenCL_INCLUDE_DIRS}
+                        -DOpenCLHeaders_INCLUDE_DIR=${OpenCL_INCLUDE_DIR}
                         -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
        DEPENDS           level-zero-loader_esimd_cpu libva
       BUILD_BYPRODUCTS  ${LIBCM} ${LIBIGFXCMRT_EMU}
