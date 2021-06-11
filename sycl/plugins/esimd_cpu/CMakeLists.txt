@@ -24,25 +24,6 @@ ExternalProject_Add_Step(libva llvminstall
   DEPENDEES install
 )
 
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/level-zero-loader_build)
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/level-zero-loader_install)
-ExternalProject_Add(level-zero-loader_esimd_cpu
-  GIT_REPOSITORY    https://github.com/oneapi-src/level-zero.git
-  GIT_TAG           v1.0.22
-  BINARY_DIR        ${CMAKE_CURRENT_BINARY_DIR}/level-zero-loader_build
-  INSTALL_DIR       ${CMAKE_CURRENT_BINARY_DIR}/level-zero-loader_install
-  CMAKE_ARGS        -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
-                    -DCMAKE_INSTALL_LIBDIR:PATH=lib${LLVM_LIBDIR_SUFFIX}
-                    ${AUX_CMAKE_FLAGS}
-  STEP_TARGETS      configure,build,install
-  DEPENDS           OpenCL-Headers
-)
-ExternalProject_Add_Step(level-zero-loader_esimd_cpu llvminstall
-  COMMAND ${CMAKE_COMMAND} -E make_directory ${LLVM_BINARY_DIR}/pi_esimd_cpu_deps && ${CMAKE_COMMAND} -E copy_directory <INSTALL_DIR>/ ${LLVM_BINARY_DIR}/pi_esimd_cpu_deps
-  COMMENT "Installing level-zero-loader into the LLVM binary directory"
-  DEPENDEES install
-)
-
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_build)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_install)
 
@@ -65,7 +46,7 @@ if (DEFINED CM_LOCAL_SOURCE_DIR)
       CMAKE_ARGS        -DLevelZero_INCLUDE_DIR=${CMAKE_CURRENT_BINARY_DIR}/level-zero-loader_install/include
                         -DLevelZero_LIBRARY=${CMAKE_CURRENT_BINARY_DIR}/level-zero-loader_install/lib
                         -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
-      DEPENDS           level-zero-loader_esimd_cpu
+      DEPENDS           level-zero-loader
       BUILD_BYPRODUCTS  ${LIBCM} ${LIBIGFXCMRT_EMU}
     )
   else()
@@ -75,11 +56,11 @@ if (DEFINED CM_LOCAL_SOURCE_DIR)
       BINARY_DIR        ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_build
       INSTALL_DIR       ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_install
       CMAKE_ARGS        -DLIBVA_INSTALL_PATH=${CMAKE_CURRENT_BINARY_DIR}/libva_install
-                        -DLevelZero_INCLUDE_DIR=${CMAKE_CURRENT_BINARY_DIR}/level-zero-loader_install/include
-                        -DLevelZero_LIBRARY=${CMAKE_CURRENT_BINARY_DIR}/level-zero-loader_install/lib
+                        -DLevelZero_INCLUDE_DIR=${LEVEL_ZERO_INCLUDE_DIR}
+                        -DLevelZero_LIBRARY=${LEVEL_ZERO_LIBRARY_DIR}
                         -DOpenCLHeaders_INCLUDE_DIR=${OpenCL_INCLUDE_DIR}
                         -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
-       DEPENDS           level-zero-loader_esimd_cpu libva
+       DEPENDS           level-zero-loader libva
       BUILD_BYPRODUCTS  ${LIBCM} ${LIBIGFXCMRT_EMU}
     )
   endif()
@@ -106,7 +87,7 @@ else ()
                         -DLevelZero_INCLUDE_DIR=${CMAKE_CURRENT_BINARY_DIR}/level-zero-loader_install/include
                         -DLevelZero_LIBRARY=${CMAKE_CURRENT_BINARY_DIR}/level-zero-loader_install/lib
                         -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
-      DEPENDS           level-zero-loader_esimd_cpu libva
+      DEPENDS           level-zero-loader libva
       BUILD_BYPRODUCTS  ${LIBCM} ${LIBIGFXCMRT_EMU}
     )
   endif()
