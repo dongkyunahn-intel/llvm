@@ -7,6 +7,23 @@ include(ExternalProject)
 include_directories("${sycl_inc_dir}")
 include_directories(${OpenCL_INCLUDE_DIR})
 
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libva_build)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libva_install)
+ExternalProject_Add(libva
+  GIT_REPOSITORY    https://github.com/intel/libva.git
+  GIT_TAG           bef69c5f380a27b6908d6daea0fc18ce50e33bb9
+  BINARY_DIR        ${CMAKE_CURRENT_BINARY_DIR}/libva_build
+  INSTALL_DIR       ${CMAKE_CURRENT_BINARY_DIR}/libva_install
+  CONFIGURE_COMMAND cd ${CMAKE_CURRENT_BINARY_DIR}/libva-prefix/src/libva && ./autogen.sh --prefix=${CMAKE_CURRENT_BINARY_DIR}/libva_install
+  BUILD_COMMAND     cd ${CMAKE_CURRENT_BINARY_DIR}/libva-prefix/src/libva && make -j
+  INSTALL_COMMAND   cd ${CMAKE_CURRENT_BINARY_DIR}/libva-prefix/src/libva && make install
+)
+ExternalProject_Add_Step(libva llvminstall
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${LLVM_BINARY_DIR}/pi_esimd_cpu_deps && ${CMAKE_COMMAND} -E copy_directory <INSTALL_DIR>/ ${LLVM_BINARY_DIR}/pi_esimd_cpu_deps
+  COMMENT "Installing libva into the LLVM binary directory"
+  DEPENDEES install
+)
+
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_build)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_install)
 
@@ -18,28 +35,41 @@ else()
   set(LIBIGFXCMRT_EMU ${LLVM_BINARY_DIR}/pi_esimd_cpu_deps/lib/libigfxcmrt_emu${CMAKE_SHARED_LIBRARY_SUFFIX})
 endif()
 
-if (DEFINED CM_PACKAGE_URL)
-  # Downloading pre-built CM Package
-  file (MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_install)
-  ExternalProject_Add(cm-emu
-    URL               ${CM_PACKAGE_URL}
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND     ""
-    UPDATE_COMMAND    ""
-    INSTALL_DIR       ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_install
-    INSTALL_COMMAND   ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_BINARY_DIR}/cm-emu-prefix/src/cm-emu/ <INSTALL_DIR>
-    BUILD_BYPRODUCTS  ${LIBCM} ${LIBIGFXCMRT_EMU}
-  )
-else()
+if (DEFINED CM_LOCAL_SOURCE_DIR)
+    # Using local CM directory for online building without downloading
   if (MSVC)
-    # Downloading pre-built CM Package for Win64 from github
-    if (DEFINED CM_LOCAL_SOURCE_DIR)
-      message( STATUS "Online-building for CM_EMU required for ESIMD_CPU is not supported. Pre-built package will be downloaded from github")
-    endif()
-
+    ExternalProject_Add(cm-emu
+      DOWNLOAD_COMMAND  ""
+      SOURCE_DIR        ${CM_LOCAL_SOURCE_DIR}
+      BINARY_DIR        ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_build
+      INSTALL_DIR       ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_install
+      CMAKE_ARGS        -DLevelZero_INCLUDE_DIR=${CMAKE_CURRENT_BINARY_DIR}/level-zero-loader_install/include
+                        -DLevelZero_LIBRARY=${CMAKE_CURRENT_BINARY_DIR}/level-zero-loader_install/lib
+                        -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+      DEPENDS           level-zero-loader
+      BUILD_BYPRODUCTS  ${LIBCM} ${LIBIGFXCMRT_EMU}
+    )
+  else()
+    ExternalProject_Add(cm-emu
+      DOWNLOAD_COMMAND  ""
+      SOURCE_DIR        ${CM_LOCAL_SOURCE_DIR}
+      BINARY_DIR        ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_build
+      INSTALL_DIR       ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_install
+      CMAKE_ARGS        -DLIBVA_INSTALL_PATH=${CMAKE_CURRENT_BINARY_DIR}/libva_install
+                        -DLevelZero_INCLUDE_DIR=${LEVEL_ZERO_INCLUDE_DIR}
+                        -DLevelZero_LIBRARY=${LEVEL_ZERO_LIBRARY_DIR}
+                        -DOpenCLHeaders_INCLUDE_DIR=${OpenCL_INCLUDE_DIR}
+                        -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+       DEPENDS           level-zero-loader libva
+      BUILD_BYPRODUCTS  ${LIBCM} ${LIBIGFXCMRT_EMU}
+    )
+  endif()
+else ()
+  if (DEFINED CM_PACKAGE_URL)
+    # Downloading pre-built CM Package
     file (MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_install)
     ExternalProject_Add(cm-emu
-      URL               https://github.com/intel/cm_emu_win64.zip
+      URL               ${CM_PACKAGE_URL}
       CONFIGURE_COMMAND ""
       BUILD_COMMAND     ""
       UPDATE_COMMAND    ""
@@ -48,58 +78,20 @@ else()
       BUILD_BYPRODUCTS  ${LIBCM} ${LIBIGFXCMRT_EMU}
     )
   else()
-    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libva_build)
-    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/libva_install)
-    ExternalProject_Add(libva
-      GIT_REPOSITORY    https://github.com/intel/libva.git
-      GIT_TAG           bef69c5f380a27b6908d6daea0fc18ce50e33bb9
-      BINARY_DIR        ${CMAKE_CURRENT_BINARY_DIR}/libva_build
-      INSTALL_DIR       ${CMAKE_CURRENT_BINARY_DIR}/libva_install
-      CONFIGURE_COMMAND cd ${CMAKE_CURRENT_BINARY_DIR}/libva-prefix/src/libva && ./autogen.sh --prefix=${CMAKE_CURRENT_BINARY_DIR}/libva_install
-      BUILD_COMMAND     cd ${CMAKE_CURRENT_BINARY_DIR}/libva-prefix/src/libva && make -j
-      INSTALL_COMMAND   cd ${CMAKE_CURRENT_BINARY_DIR}/libva-prefix/src/libva && make install
+    # Build from CM source tree fetched from github
+    ExternalProject_Add(cm-emu
+      GIT_REPOSITORY    https://github.com/intel/cm-cpu-emulation.git
+      BINARY_DIR        ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_build
+      INSTALL_DIR       ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_install
+      CMAKE_ARGS        -DLIBVA_INSTALL_PATH=${CMAKE_CURRENT_BINARY_DIR}/libva_install
+                        -DLevelZero_INCLUDE_DIR=${CMAKE_CURRENT_BINARY_DIR}/level-zero-loader_install/include
+                        -DLevelZero_LIBRARY=${CMAKE_CURRENT_BINARY_DIR}/level-zero-loader_install/lib
+                        -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+      DEPENDS           level-zero-loader libva
+      BUILD_BYPRODUCTS  ${LIBCM} ${LIBIGFXCMRT_EMU}
     )
-
-    ExternalProject_Add_Step(libva llvminstall
-      COMMAND ${CMAKE_COMMAND} -E make_directory ${LLVM_BINARY_DIR}/pi_esimd_cpu_deps && ${CMAKE_COMMAND} -E copy_directory <INSTALL_DIR>/ ${LLVM_BINARY_DIR}/pi_esimd_cpu_deps
-      COMMENT "Installing libva required for ESIMD_CPU support into the LLVM binary directory"
-      DEPENDEES install
-    )
-
-    if (DEFINED CM_LOCAL_SOURCE_DIR)
-      message( STATUS "CM_EMU required for ESIMD_CPU will be built with local source directory")
-      ExternalProject_Add(cm-emu
-        DOWNLOAD_COMMAND  ""
-        SOURCE_DIR        ${CM_LOCAL_SOURCE_DIR}
-        BINARY_DIR        ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_build
-        INSTALL_DIR       ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_install
-        CMAKE_ARGS        -DLIBVA_INSTALL_PATH=${CMAKE_CURRENT_BINARY_DIR}/libva_install
-                          -DLevelZero_INCLUDE_DIR=${LEVEL_ZERO_INCLUDE_DIR}
-                          -DLevelZero_LIBRARY=${LEVEL_ZERO_LIBRARY_DIR}
-                          -DOpenCLHeaders_INCLUDE_DIR=${OpenCL_INCLUDE_DIR}
-                          -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
-         DEPENDS           level-zero-loader libva
-        BUILD_BYPRODUCTS  ${LIBCM} ${LIBIGFXCMRT_EMU}
-    )
-    else()
-      # Build from CM source tree fetched from github
-      # https://github.com/intel/cm-cpu-emulation/releases
-      message( STATUS "CM_EMU required for ESIMD_CPU will be built with source code downloaded from github.com")
-      ExternalProject_Add(cm-emu
-        GIT_REPOSITORY    https://github.com/intel/cm-cpu-emulation.git
-        BINARY_DIR        ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_build
-        INSTALL_DIR       ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_install
-        CMAKE_ARGS        -DLIBVA_INSTALL_PATH=${CMAKE_CURRENT_BINARY_DIR}/libva_install
-                          -DLevelZero_INCLUDE_DIR=${LEVEL_ZERO_INCLUDE_DIR}
-                          -DLevelZero_LIBRARY=${LEVEL_ZERO_LIBRARY_DIR}
-                          -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
-        DEPENDS           level-zero-loader libva
-        BUILD_BYPRODUCTS  ${LIBCM} ${LIBIGFXCMRT_EMU}
-      )
-    endif()
   endif()
-endif()
-
+endif ()
 ExternalProject_Add_Step(cm-emu llvminstall
   COMMAND ${CMAKE_COMMAND} -E make_directory ${LLVM_BINARY_DIR}/pi_esimd_cpu_deps && ${CMAKE_COMMAND} -E copy_directory <INSTALL_DIR>/ ${LLVM_BINARY_DIR}/pi_esimd_cpu_deps
   COMMENT "Installing cm-emu into the LLVM binary directory"
@@ -117,9 +109,11 @@ set(CMAKE_CXX_STANDARD 17)
 # Compilation option modification to prevent build termination caused by
 # warnings from CM-imported files
 if (MSVC)
+string(REPLACE "/WX" " " CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 string(REPLACE "/W4" " " CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 else()
-string(REPLACE "-pedantic" " " CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+string(REPLACE "-Werror=date\-time" " " CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+string(REPLACE "-Werror" " " CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 endif()
 
 add_library(pi_esimd_cpu SHARED
