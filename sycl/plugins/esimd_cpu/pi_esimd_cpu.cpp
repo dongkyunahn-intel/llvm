@@ -44,35 +44,29 @@
 
 namespace {
 
+// Helper functions for unified 'Return' type declaration
 template <typename T, typename Assign>
 pi_result getInfoImpl(size_t param_value_size, void *param_value,
                       size_t *param_value_size_ret, T value, size_t value_size,
                       Assign &&assign_func) {
-
   if (param_value != nullptr) {
-
     if (param_value_size < value_size) {
       return PI_INVALID_VALUE;
     }
-
     assign_func(param_value, value, value_size);
   }
-
   if (param_value_size_ret != nullptr) {
     *param_value_size_ret = value_size;
   }
-
   return PI_SUCCESS;
 }
 
 template <typename T>
 pi_result getInfo(size_t param_value_size, void *param_value,
                   size_t *param_value_size_ret, T value) {
-
   auto assignment = [](void *param_value, T value, size_t value_size) {
     *static_cast<T *>(param_value) = value;
   };
-
   return getInfoImpl(param_value_size, param_value, param_value_size_ret, value,
                      sizeof(T), assignment);
 }
@@ -179,20 +173,20 @@ LAMBDA_WRAPPER_TMPL(sycl::nd_item<3>, NDITEM_3DIM, 3)
 
 extern "C" {
 
-inline void InvokeLambda_ID_1DIM(void *Wrapper) {
+void InvokeLambda_ID_1DIM(void *Wrapper) {
   auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_ID_1DIM *>(Wrapper);
   cl::sycl::id<1> Id1Dim(cm_support::get_thread_idx(0));
   LambdaWrapper->Func(Id1Dim);
 }
 
-inline void InvokeLambda_ID_2DIM(void *Wrapper) {
+void InvokeLambda_ID_2DIM(void *Wrapper) {
   auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_ID_2DIM *>(Wrapper);
   cl::sycl::id<2> Id2Dim(cm_support::get_thread_idx(0),
                          cm_support::get_thread_idx(1));
   LambdaWrapper->Func(Id2Dim);
 }
 
-inline void InvokeLambda_ID_3DIM(void *Wrapper) {
+void InvokeLambda_ID_3DIM(void *Wrapper) {
   auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_ID_3DIM *>(Wrapper);
   cl::sycl::id<3> Id3Dim(cm_support::get_thread_idx(0),
                          cm_support::get_thread_idx(1),
@@ -200,7 +194,7 @@ inline void InvokeLambda_ID_3DIM(void *Wrapper) {
   LambdaWrapper->Func(Id3Dim);
 }
 
-inline void InvokeLambda_ITEM_1DIM(void *Wrapper) {
+void InvokeLambda_ITEM_1DIM(void *Wrapper) {
   auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_ITEM_1DIM *>(Wrapper);
   cl::sycl::item<1, false> Item1Dim = IDBuilder::createItem<1, false>(
       {cm_support::get_thread_count(0)}, /// Extent
@@ -208,7 +202,7 @@ inline void InvokeLambda_ITEM_1DIM(void *Wrapper) {
   LambdaWrapper->Func(Item1Dim);
 }
 
-inline void InvokeLambda_ITEM_2DIM(void *Wrapper) {
+void InvokeLambda_ITEM_2DIM(void *Wrapper) {
   auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_ITEM_2DIM *>(Wrapper);
   cl::sycl::item<2, false> Item2Dim = IDBuilder::createItem<2, false>(
       {cm_support::get_thread_count(0), /// Extent
@@ -218,7 +212,7 @@ inline void InvokeLambda_ITEM_2DIM(void *Wrapper) {
   LambdaWrapper->Func(Item2Dim);
 }
 
-inline void InvokeLambda_ITEM_3DIM(void *Wrapper) {
+void InvokeLambda_ITEM_3DIM(void *Wrapper) {
   auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_ITEM_3DIM *>(Wrapper);
   cl::sycl::item<3, false> Item3Dim = IDBuilder::createItem<3, false>(
       {cm_support::get_thread_count(0), /// Extent
@@ -229,7 +223,7 @@ inline void InvokeLambda_ITEM_3DIM(void *Wrapper) {
   LambdaWrapper->Func(Item3Dim);
 }
 
-inline void InvokeLambda_ITEM_OFFSET_1DIM(void *Wrapper) {
+void InvokeLambda_ITEM_OFFSET_1DIM(void *Wrapper) {
   auto *LambdaWrapper =
       reinterpret_cast<LambdaWrapper_ITEM_OFFSET_1DIM *>(Wrapper);
 
@@ -242,7 +236,7 @@ inline void InvokeLambda_ITEM_OFFSET_1DIM(void *Wrapper) {
   LambdaWrapper->Func(ItemOffset1Dim);
 }
 
-inline void InvokeLambda_ITEM_OFFSET_2DIM(void *Wrapper) {
+void InvokeLambda_ITEM_OFFSET_2DIM(void *Wrapper) {
   auto *LambdaWrapper =
       reinterpret_cast<LambdaWrapper_ITEM_OFFSET_2DIM *>(Wrapper);
 
@@ -256,7 +250,7 @@ inline void InvokeLambda_ITEM_OFFSET_2DIM(void *Wrapper) {
   LambdaWrapper->Func(ItemOffset2Dim);
 }
 
-inline void InvokeLambda_ITEM_OFFSET_3DIM(void *Wrapper) {
+void InvokeLambda_ITEM_OFFSET_3DIM(void *Wrapper) {
   auto *LambdaWrapper =
       reinterpret_cast<LambdaWrapper_ITEM_OFFSET_3DIM *>(Wrapper);
 
@@ -271,7 +265,7 @@ inline void InvokeLambda_ITEM_OFFSET_3DIM(void *Wrapper) {
   LambdaWrapper->Func(ItemOffset3Dim);
 }
 
-inline void InvokeLambda_NDITEM_1DIM(void *Wrapper) {
+void InvokeLambda_NDITEM_1DIM(void *Wrapper) {
   auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_NDITEM_1DIM *>(Wrapper);
   sycl::range<1> GroupSize(
       sycl::detail::InitializedVal<1, sycl::range>::template get<0>());
@@ -304,7 +298,7 @@ inline void InvokeLambda_NDITEM_1DIM(void *Wrapper) {
   LambdaWrapper->Func(NDItem1Dim);
 }
 
-inline void InvokeLambda_NDITEM_2DIM(void *Wrapper) {
+void InvokeLambda_NDITEM_2DIM(void *Wrapper) {
   auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_NDITEM_2DIM *>(Wrapper);
   sycl::range<2> GroupSize(
       sycl::detail::InitializedVal<2, sycl::range>::template get<0>());
@@ -341,7 +335,7 @@ inline void InvokeLambda_NDITEM_2DIM(void *Wrapper) {
   LambdaWrapper->Func(NDItem2Dim);
 }
 
-inline void InvokeLambda_NDITEM_3DIM(void *Wrapper) {
+void InvokeLambda_NDITEM_3DIM(void *Wrapper) {
   auto *LambdaWrapper = reinterpret_cast<LambdaWrapper_NDITEM_3DIM *>(Wrapper);
   sycl::range<3> GroupSize(
       sycl::detail::InitializedVal<3, sycl::range>::template get<0>());
@@ -404,7 +398,9 @@ private:
 public:
   libCMBatch(KernelType Kernel)
       : MKernel(Kernel), GroupDim{1, 1, 1}, SpaceDim{1, 1, 1} {
-    assert(MKernel != nullptr);
+    if (MKernel == nullptr) {
+      throw sycl::kernel_error();
+    }
   }
 
   // ID_1DIM
@@ -660,32 +656,20 @@ sycl::detail::ESIMDDeviceInterface::ESIMDDeviceInterface() {
 /// piEnqueueKernelLaunch
 template <typename T> using KernelFunc = std::function<void(T)>;
 
-template <int NDims> struct InvokeBaseImpl {
-  static sycl::range<NDims> get_range(const size_t *GlobalWorkSize);
-};
-
-static constexpr bool isNull(int NDims, const size_t *R) {
+static bool isNull(int NDims, const size_t *R) {
   return ((0 == R[0]) && (1 > NDims || 0 == R[1]) && (2 > NDims || 0 == R[2]));
 }
 
 template <int NDims, typename ArgTy> struct InvokeImpl {
 
-  template <int _NDims = NDims>
-  static typename std::enable_if<_NDims == 1, sycl::range<1>>::type
-  get_range(const size_t *a) {
-    return sycl::range<1>(a[0]);
-  }
-
-  template <int _NDims = NDims>
-  static typename std::enable_if<_NDims == 2, sycl::range<2>>::type
-  get_range(const size_t *a) {
-    return sycl::range<2>(a[0], a[1]);
-  }
-
-  template <int _NDims = NDims>
-  static typename std::enable_if<_NDims == 3, sycl::range<3>>::type
-  get_range(const size_t *a) {
-    return sycl::range<3>(a[0], a[1], a[2]);
+  static sycl::range<NDims> get_range(const size_t *a) {
+    if constexpr (NDims == 1)
+      return sycl::range<NDims>{a[0]};
+    else if constexpr (NDims == 2)
+      return sycl::range<NDims>{a[0], a[1]};
+    else if constexpr (NDims == 3)
+      return sycl::range<NDims>{a[0], a[1], a[2]};
+    throw sycl::nd_range_error();
   }
 
   static void invoke(void *fptr, const sycl::range<NDims> &range) {
@@ -770,7 +754,9 @@ pi_result piPlatformsGet(pi_uint32 NumEntries, pi_platform *Platforms,
 pi_result piPlatformGetInfo(pi_platform Platform, pi_platform_info ParamName,
                             size_t ParamValueSize, void *ParamValue,
                             size_t *ParamValueSizeRet) {
-  assert(Platform);
+  if (Platform == nullptr) {
+    return PI_INVALID_PLATFORM;
+  }
   ReturnHelper ReturnValue(ParamValueSize, ParamValue, ParamValueSizeRet);
 
   switch (ParamName) {
@@ -821,7 +807,6 @@ pi_result piDevicesGet(pi_platform Platform, pi_device_type DeviceType,
   if (NumDevices) {
     *NumDevices = 1;
   } else {
-    // assert(NumEntries == 1);
     Devices[0] = new _pi_device(Platform);
   }
 
@@ -829,7 +814,9 @@ pi_result piDevicesGet(pi_platform Platform, pi_device_type DeviceType,
 }
 
 pi_result piDeviceRetain(pi_device Device) {
-  assert(Device);
+  if (Device == nullptr) {
+    return PI_INVALID_DEVICE;
+  }
 
   ++(Device->RefCount);
 
@@ -981,8 +968,12 @@ pi_result piContextCreate(const pi_context_properties *Properties,
   if (NumDevices != 1) {
     return PI_INVALID_VALUE;
   }
-  assert(Devices);
-  assert(RetContext);
+  if (Devices == nullptr) {
+    return PI_INVALID_DEVICE;
+  }
+  if (RetContext == nullptr) {
+    return PI_INVALID_VALUE;
+  }
 
   cm_support::CmDevice *device = nullptr;
   unsigned int version = 0;
@@ -1106,9 +1097,16 @@ pi_result piextQueueCreateWithNativeHandle(pi_native_handle, pi_context,
 pi_result piMemBufferCreate(pi_context Context, pi_mem_flags Flags, size_t Size,
                             void *HostPtr, pi_mem *RetMem,
                             const pi_mem_properties *properties) {
-  assert((Flags & PI_MEM_FLAGS_ACCESS_RW) != 0);
-  assert(Context);
-  assert(RetMem);
+  if ((Flags & PI_MEM_FLAGS_ACCESS_RW) == 0) {
+    die("piMemBufferCreate: Level-Zero implements only read-write buffer,"
+        "no read-only or write-only yet.");
+  }
+  if ((Context == nullptr) || (Context->CmDevicePtr == nullptr)) {
+    return PI_INVALID_CONTEXT;
+  }
+  if (RetMem == nullptr) {
+    return PI_INVALID_VALUE;
+  }
 
   cm_support::CmBuffer *CmBuf = nullptr;
   cm_support::SurfaceIndex *CmIndex;
@@ -1150,12 +1148,25 @@ pi_result piMemGetInfo(pi_mem, cl_mem_info, size_t, void *, size_t *) {
   return PI_SUCCESS;
 }
 
-pi_result piMemRetain(pi_mem) {
-  DIE_NO_IMPLEMENTATION;
+pi_result piMemRetain(pi_mem Mem) {
+  if (Mem == nullptr) {
+    return PI_INVALID_MEM_OBJECT;
+  }
+  ++(Mem->RefCount);
   return PI_SUCCESS;
 }
 
 pi_result piMemRelease(pi_mem Mem) {
+  if (Mem == nullptr) {
+    return PI_INVALID_MEM_OBJECT;
+  }
+
+  Mem->RefCount -= 1;
+
+  if (Mem->RefCount != 0) {
+    return PI_SUCCESS;
+  }
+
   if (Mem->getMemType() == PI_MEM_TYPE_BUFFER) {
     _pi_buffer *pi_buf = static_cast<_pi_buffer *>(Mem);
     int result = Mem->Context->CmDevicePtr->DestroySurface(pi_buf->CmBufferPtr);
@@ -1186,7 +1197,7 @@ pi_result piMemRelease(pi_mem Mem) {
 }
 
 cm_support::CM_SURFACE_FORMAT
-piImageFormatToCmFormat(const pi_image_format *piFormat) {
+ConvertPiImageFormatToCmFormat(const pi_image_format *piFormat) {
   using ULongPair = std::pair<unsigned long, unsigned long>;
   using FmtMap = std::map<ULongPair, cm_support::CM_SURFACE_FORMAT>;
   static const FmtMap pi2cm = {
@@ -1221,16 +1232,6 @@ pi_result piMemImageCreate(pi_context Context, pi_mem_flags Flags,
   switch (ImageDesc->image_type) {
   case PI_MEM_TYPE_IMAGE2D:
     break;
-  case PI_MEM_TYPE_IMAGE1D_BUFFER:
-    // NOTE : Temporarily added for enabling vadd_1d and
-    // vadd_raw_send. Remove for migration to github as
-    // 'wrapIntoImageBuffer' is deprecated in github repo
-    assert(ImageFormat->image_channel_data_type ==
-           PI_IMAGE_CHANNEL_TYPE_UNSIGNED_INT8);
-    assert(ImageFormat->image_channel_order == PI_IMAGE_CHANNEL_ORDER_R);
-    assert(ImageDesc->image_height == 0);
-    return piMemBufferCreate(Context, Flags, ImageDesc->image_width, HostPtr,
-                             RetImage);
   default:
     return PI_INVALID_MEM_OBJECT;
   }
@@ -1254,7 +1255,7 @@ pi_result piMemImageCreate(pi_context Context, pi_mem_flags Flags,
   int status = Context->CmDevicePtr->CreateSurface2D(
       static_cast<unsigned int>(ImageDesc->image_width),
       static_cast<unsigned int>(ImageDesc->image_height),
-      piImageFormatToCmFormat(ImageFormat), CmSurface);
+      ConvertPiImageFormatToCmFormat(ImageFormat), CmSurface);
 
   if (status != cm_support::CM_SUCCESS) {
     return PI_OUT_OF_HOST_MEMORY;
@@ -1541,9 +1542,13 @@ pi_result piEnqueueMemBufferRead(pi_queue Queue, pi_mem Src,
                                  pi_uint32 NumEventsInWaitList,
                                  const pi_event *EventWaitList,
                                  pi_event *Event) {
-  /// TODO : Support Blocked read, 'Queue' handling
-  assert(BlockingRead == false);
-  assert(NumEventsInWaitList == 0);
+  if (BlockingRead) {
+    /// TODO : Support Blocked read, 'Queue' handling
+    return PI_INVALID_OPERATION;
+  }
+  if (NumEventsInWaitList != 0) {
+    return PI_INVALID_EVENT_WAIT_LIST;
+  }
 
   _pi_buffer *buf = static_cast<_pi_buffer *>(Src);
 
@@ -1760,8 +1765,12 @@ pi_result piextUSMSharedAlloc(void **ResultPtr, pi_context Context,
                               pi_device Device,
                               pi_usm_mem_properties *Properties, size_t Size,
                               pi_uint32 Alignment) {
-  assert(Context);
-  assert(ResultPtr);
+  if ((Context == nullptr) || (Context->CmDevicePtr == nullptr)) {
+    return PI_INVALID_CONTEXT;
+  }
+  if (ResultPtr == nullptr) {
+    return PI_INVALID_OPERATION;
+  }
 
   cm_support::CmBufferSVM *buf = nullptr;
   void *pSystemMem = nullptr;
@@ -1773,19 +1782,29 @@ pi_result piextUSMSharedAlloc(void **ResultPtr, pi_context Context,
   }
   *ResultPtr = pSystemMem;
   auto it = Context->Addr2CmBufferSVM.find(pSystemMem);
-  assert(Context->Addr2CmBufferSVM.end() == it);
+  if (Context->Addr2CmBufferSVM.end() != it) {
+    return PI_INVALID_MEM_OBJECT;
+  }
   Context->Addr2CmBufferSVM[pSystemMem] = buf;
   return PI_SUCCESS;
 }
 
 pi_result piextUSMFree(pi_context Context, void *Ptr) {
-  assert(Context);
-  assert(Ptr);
+  if ((Context == nullptr) || (Context->CmDevicePtr == nullptr)) {
+    return PI_INVALID_CONTEXT;
+  }
+  if (Ptr == nullptr) {
+    return PI_INVALID_OPERATION;
+  }
 
   cm_support::CmBufferSVM *buf = Context->Addr2CmBufferSVM[Ptr];
-  assert(buf);
+  if (buf == nullptr) {
+    return PI_INVALID_MEM_OBJECT;
+  }
   auto count = Context->Addr2CmBufferSVM.erase(Ptr);
-  assert(1 == count);
+  if (count == 1) {
+    return PI_INVALID_MEM_OBJECT;
+  }
   int32_t ret = Context->CmDevicePtr->DestroyBufferSVM(buf);
   if (cm_support::CM_SUCCESS != ret) {
     return PI_ERROR_UNKNOWN;
@@ -1860,9 +1879,15 @@ pi_result piTearDown(void *) {
 }
 
 pi_result piPluginInit(pi_plugin *PluginInit) {
-  assert(PluginInit);
+  if (PluginInit == nullptr) {
+    return PI_INVALID_VALUE;
+  }
+
   size_t PluginVersionSize = sizeof(PluginInit->PluginVersion);
   assert(strlen(_PI_H_VERSION_STRING) < PluginVersionSize);
+  if (strlen(_PI_H_VERSION_STRING) >= PluginVersionSize) {
+    return PI_INVALID_VALUE;
+  }
   strncpy(PluginInit->PluginVersion, _PI_H_VERSION_STRING, PluginVersionSize);
 
   PiESimdDeviceAccess = new sycl::detail::ESIMDEmuPluginOpaqueData();

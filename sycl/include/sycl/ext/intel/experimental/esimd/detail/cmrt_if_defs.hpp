@@ -74,46 +74,17 @@ struct _pi_mem : _pi_object {
   // Surface index used by CM
   int SurfaceIndex;
 
-  // Supplementary data to keep track of the mappings of this memory
-  // created with piEnqueueMemBufferMap and piEnqueueMemImageMap.
-  struct Mapping {
-    // The offset in the buffer giving the start of the mapped region.
-    size_t Offset;
-    // The size of the mapped region.
-    size_t Size;
-  };
-
-  /*
-  // Method to get type of the derived object (image or buffer)
-  virtual bool isImage() const = 0;
-  */
-
   virtual ~_pi_mem() = default;
 
   _pi_mem_type getMemType() const { return MemType; };
-
-  /*
-  // Thread-safe methods to work with memory mappings
-  pi_result addMapping(void *MappedTo, size_t Size, size_t Offset);
-  pi_result removeMapping(void *MappedTo, Mapping &MapInfo);
-  */
 
 protected:
   _pi_mem(pi_context ctxt, char *HostPtr, _pi_mem_type MemTypeArg,
           int SurfaceIdxArg)
       : Context{ctxt}, MapHostPtr{HostPtr},
-        SurfaceIndex{SurfaceIdxArg}, Mappings{}, MemType{MemTypeArg} {}
+        SurfaceIndex{SurfaceIdxArg}, MemType{MemTypeArg} {}
 
 private:
-  // The key is the host pointer representing an active mapping.
-  // The value is the information needed to maintain/undo the mapping.
-  std::unordered_map<void *, Mapping> Mappings;
-
-  // TODO: we'd like to create a thread safe map class instead of mutex + map,
-  // that must be carefully used together.
-  // The mutex that is used for thread-safe work with Mappings.
-  std::mutex MappingsMutex;
-
   _pi_mem_type MemType;
 };
 
