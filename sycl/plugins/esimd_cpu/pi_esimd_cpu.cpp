@@ -1098,8 +1098,7 @@ pi_result piMemBufferCreate(pi_context Context, pi_mem_flags Flags, size_t Size,
                             void *HostPtr, pi_mem *RetMem,
                             const pi_mem_properties *properties) {
   if ((Flags & PI_MEM_FLAGS_ACCESS_RW) == 0) {
-    die("piMemBufferCreate: Level-Zero implements only read-write buffer,"
-        "no read-only or write-only yet.");
+    return PI_INVALID_OPERATION;
   }
   if ((Context == nullptr) || (Context->CmDevicePtr == nullptr)) {
     return PI_INVALID_CONTEXT;
@@ -1802,7 +1801,7 @@ pi_result piextUSMFree(pi_context Context, void *Ptr) {
     return PI_INVALID_MEM_OBJECT;
   }
   auto count = Context->Addr2CmBufferSVM.erase(Ptr);
-  if (count == 1) {
+  if (count != 1) {
     return PI_INVALID_MEM_OBJECT;
   }
   int32_t ret = Context->CmDevicePtr->DestroyBufferSVM(buf);
