@@ -124,12 +124,13 @@ getSyclDeviceTypeMap() {
 }
 
 // Array is used by SYCL_DEVICE_FILTER and SYCL_DEVICE_ALLOWLIST
-const std::array<std::pair<std::string, backend>, 6> &getSyclBeMap() {
-  static const std::array<std::pair<std::string, backend>, 6> SyclBeMap = {
+const std::array<std::pair<std::string, backend>, 7> &getSyclBeMap() {
+  static const std::array<std::pair<std::string, backend>, 7> SyclBeMap = {
       {{"host", backend::host},
        {"opencl", backend::opencl},
        {"level_zero", backend::level_zero},
        {"cuda", backend::cuda},
+       {"esimd_cpu", backend::esimd_cpu},
        {"rocm", backend::rocm},
        {"*", backend::all}}};
   return SyclBeMap;
