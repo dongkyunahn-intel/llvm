@@ -291,18 +291,24 @@ std::vector<std::pair<std::string, backend>> findPlugins() {
   const char *ROCMPluginName = SYCLConfig<SYCL_OVERRIDE_PI_ROCM>::get()
                                    ? SYCLConfig<SYCL_OVERRIDE_PI_ROCM>::get()
                                    : __SYCL_ROCM_PLUGIN_NAME;
+  const char *ESIMDCPUPluginName =
+      SYCLConfig<SYCL_OVERRIDE_PI_ESIMD_CPU>::get()
+          ? SYCLConfig<SYCL_OVERRIDE_PI_ESIMD_CPU>::get()
+          : __SYCL_ESIMD_CPU_PLUGIN_NAME;
   device_filter_list *FilterList = SYCLConfig<SYCL_DEVICE_FILTER>::get();
   if (!FilterList) {
     PluginNames.emplace_back(OpenCLPluginName, backend::opencl);
     PluginNames.emplace_back(L0PluginName, backend::level_zero);
     PluginNames.emplace_back(CUDAPluginName, backend::cuda);
     PluginNames.emplace_back(ROCMPluginName, backend::rocm);
+    PluginNames.emplace_back(ESIMDCPUPluginName, backend::esimd_cpu);
   } else {
     std::vector<device_filter> Filters = FilterList->get();
     bool OpenCLFound = false;
     bool LevelZeroFound = false;
     bool CudaFound = false;
     bool RocmFound = false;
+    bool EsimdCpuFound = false;
     for (const device_filter &Filter : Filters) {
       backend Backend = Filter.Backend;
       if (!OpenCLFound &&
@@ -322,6 +328,11 @@ std::vector<std::pair<std::string, backend>> findPlugins() {
       if (!RocmFound && (Backend == backend::rocm || Backend == backend::all)) {
         PluginNames.emplace_back(ROCMPluginName, backend::rocm);
         RocmFound = true;
+      }
+      if (!EsimdCpuFound &&
+          (Backend == backend::esimd_cpu || Backend == backend::all)) {
+        PluginNames.emplace_back(ESIMDCPUPluginName, backend::esimd_cpu);
+        EsimdCpuFound = true;
       }
     }
   }
@@ -436,6 +447,11 @@ static void initializePlugins(std::vector<plugin> *Plugins) {
       // Use the LEVEL_ZERO plugin as the GlobalPlugin
       GlobalPlugin = std::make_shared<plugin>(PluginInformation,
                                               backend::level_zero, Library);
+    } else if (InteropBE == backend::esimd_cpu &&
+               PluginNames[I].first.find("esimd_cpu") != std::string::npos) {
+      // Use the ESIMD_CPU plugin as the GlobalPlugin
+      GlobalPlugin = std::make_shared<plugin>(PluginInformation,
+                                              backend::esimd_cpu, Library);
     }
     Plugins->emplace_back(
         plugin(PluginInformation, PluginNames[I].second, Library));

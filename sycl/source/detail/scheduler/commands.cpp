@@ -1949,7 +1949,8 @@ cl_int ExecCGCommand::enqueueImp() {
 
     NDRDescT &NDRDesc = ExecKernel->MNDRDesc;
 
-    if (MQueue->is_host()) {
+    if (MQueue->is_host() ||
+        (MQueue->getPlugin().getBackend() == backend::esimd_cpu)) {
       for (ArgDesc &Arg : ExecKernel->MArgs)
         if (kernel_param_kind_t::kind_accessor == Arg.MType) {
           Requirement *Req = (Requirement *)(Arg.MPtr);
@@ -1961,8 +1962,18 @@ cl_int ExecCGCommand::enqueueImp() {
         const detail::plugin &Plugin = EventImpls[0]->getPlugin();
         Plugin.call<PiApiKind::piEventsWait>(RawEvents.size(), &RawEvents[0]);
       }
-      ExecKernel->MHostKernel->call(NDRDesc,
-                                    getEvent()->getHostProfilingInfo());
+
+      if (MQueue->is_host()) {
+        ExecKernel->MHostKernel->call(NDRDesc,
+                                      getEvent()->getHostProfilingInfo());
+      } else {
+        assert(MQueue->getPlugin().getBackend() == backend::esimd_cpu);
+        MQueue->getPlugin().call<PiApiKind::piEnqueueKernelLaunch>(
+            nullptr,
+            reinterpret_cast<pi_kernel>(ExecKernel->MHostKernel->getPtr()),
+            NDRDesc.Dims, &NDRDesc.GlobalOffset[0], &NDRDesc.GlobalSize[0],
+            &NDRDesc.LocalSize[0], 0, nullptr, nullptr);
+      }
 
       return CL_SUCCESS;
     }
@@ -2206,7 +2217,11 @@ cl_int ExecCGCommand::enqueueImp() {
 }
 
 bool ExecCGCommand::producesPiEvent() const {
-  return MCommandGroup->getType() != CG::CGType::CodeplayHostTask;
+  if (MQueue->getPlugin().getBackend() == backend::esimd_cpu) {
+    return false;
+  } else {
+    return MCommandGroup->getType() != CG::CGType::CodeplayHostTask;
+  }
 }
 
 } // namespace detail
