@@ -80,7 +80,7 @@ else ()
   else()
     # Build from CM source tree fetched from github
     if (MSVC)
-      message(FATAL_ERROR "Online CM_EMU building is not supported under Windows")
+      message(FATAL_ERROR "Online-building of CM_EMU library is not supported under Windows environment")
     else()
       ExternalProject_Add(cm-emu
         GIT_REPOSITORY    https://github.com/intel/cm-cpu-emulation.git
@@ -91,7 +91,7 @@ else ()
                           -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
         DEPENDS           libva
         BUILD_BYPRODUCTS  ${LIBCM} ${LIBIGFXCMRT_EMU}
-    )
+      )
     endif()
   endif()
 endif ()
