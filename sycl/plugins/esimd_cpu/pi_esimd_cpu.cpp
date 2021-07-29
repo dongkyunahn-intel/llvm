@@ -147,12 +147,13 @@ template <int NDims> struct LambdaWrapper {
 
 // Function to generate a lambda wrapper object above
 template <int NDims>
-auto MakeLambdaWrapper(KernelFunc<NDims> F, const sycl::range<NDims> &LocalSize,
+auto MakeLambdaWrapper(KernelFunc<NDims> ArgFunc,
+                       const sycl::range<NDims> &LocalSize,
                        const sycl::range<NDims> &GlobalSize,
                        const sycl::id<NDims> &GlobalOffset) {
   std::unique_ptr<LambdaWrapper<NDims>> Wrapper =
       std::make_unique<LambdaWrapper<NDims>>(LambdaWrapper<NDims>(
-          KernelFunc<NDims>(F), LocalSize, GlobalSize, GlobalOffset));
+          KernelFunc<NDims>(ArgFunc), LocalSize, GlobalSize, GlobalOffset));
   return Wrapper;
 }
 
@@ -737,13 +738,6 @@ pi_result piMemBufferCreate(pi_context Context, pi_mem_flags Flags, size_t Size,
     }
     return PI_INVALID_OPERATION;
   }
-  if ((Flags & PI_MEM_FLAGS_HOST_PTR_COPY) != 0) {
-    if (PrintPiTrace) {
-      std::cerr << "ESIMD_CPU does not support ReadOnly-HostPtr for Buffer - "
-                << __FUNCTION__ << std::endl;
-    }
-    return PI_INVALID_OPERATION;
-  }
 
   if (Context == nullptr) {
     return PI_INVALID_CONTEXT;
@@ -774,7 +768,7 @@ pi_result piMemBufferCreate(pi_context Context, pi_mem_flags Flags, size_t Size,
   }
 
   auto HostPtrOrNull =
-      (Flags & PI_MEM_FLAGS_HOST_PTR_USE) ? pi_cast<char *>(HostPtr) : nullptr;
+      (Flags & PI_MEM_FLAGS_HOST_PTR_COPY) ? nullptr : pi_cast<char *>(HostPtr);
 
   try {
     *RetMem =
@@ -867,13 +861,6 @@ pi_result piMemImageCreate(pi_context Context, pi_mem_flags Flags,
     }
     return PI_INVALID_OPERATION;
   }
-  if ((Flags & PI_MEM_FLAGS_HOST_PTR_COPY) != 0) {
-    if (PrintPiTrace) {
-      std::cerr << "ESIMD_CPU does not support ReadOnly-HostPtr for Image - "
-                << __FUNCTION__ << std::endl;
-    }
-    return PI_INVALID_OPERATION;
-  }
 
   if (ImageFormat == nullptr || ImageDesc == nullptr)
     return PI_INVALID_IMAGE_FORMAT_DESCRIPTOR;
@@ -929,7 +916,7 @@ pi_result piMemImageCreate(pi_context Context, pi_mem_flags Flags,
   }
 
   auto HostPtrOrNull =
-      (Flags & PI_MEM_FLAGS_HOST_PTR_USE) ? pi_cast<char *>(HostPtr) : nullptr;
+      (Flags & PI_MEM_FLAGS_HOST_PTR_COPY) ? nullptr : pi_cast<char *>(HostPtr);
 
   try {
     *RetImage = new _pi_image(Context, HostPtrOrNull, CmSurface,
@@ -1144,7 +1131,6 @@ pi_result piextEventCreateWithNativeHandle(pi_native_handle, pi_context, bool,
                                            pi_event *) {
   DIE_NO_IMPLEMENTATION;
 }
-
 pi_result piSamplerCreate(pi_context, const pi_sampler_properties *,
                           pi_sampler *) {
   DIE_NO_IMPLEMENTATION;
@@ -1346,7 +1332,7 @@ piEnqueueKernelLaunch(pi_queue Queue, pi_kernel Kernel, pi_uint32 WorkDim,
     return PI_INVALID_KERNEL;
   }
 
-  if (WorkDim > 3) {
+  if ((WorkDim > 3) || (WorkDim == 0)) {
     return PI_INVALID_WORK_GROUP_SIZE;
   }
 
