@@ -17,8 +17,6 @@ add_subdirectory(level_zero)
 
 # TODO : Remove 'if (NOT MSVC)' when CM_EMU supports Windows
 # environment
-if (NOT MSVC)
-  if (SYCL_BUILD_PI_ESIMD_CPU)
+if (SYCL_BUILD_PI_ESIMD_CPU)
     add_subdirectory(esimd_cpu)
-  endif()
 endif()

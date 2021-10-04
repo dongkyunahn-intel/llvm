@@ -30,6 +30,14 @@ if (DEFINED CM_LOCAL_SOURCE_DIR)
       BINARY_DIR        ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_build
       INSTALL_DIR       ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_install
       CMAKE_ARGS        -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+                        -G"Visual Studio 16 2019"
+                        -A x64
+                        -Thost=x64
+                        -DCMAKE_BUILD_TYPE=Release
+                        -DLibFFI_LIBRARY=${CM_FFI_LIB_DIR}/libffi.lib
+                        -DLibFFI_INCLUDE_DIR=${CM_FFI_INC_DIR}/
+                        -D__SYCL_EXPLICIT_SIMD_PLUGIN__=true
+                        ${CM_LOCAL_SOURCE_DIR}
       BUILD_BYPRODUCTS  ${LIBCM} ${LIBIGFXCMRT_EMU}
     )
   else()
