@@ -660,9 +660,7 @@ inline ESIMD_NODEBUG void esimd_sbarrier(split_barrier_action flag) {
 /// @{
 
 /// Declare per-work-group slm size.
-SYCL_EXTERNAL SYCL_ESIMD_FUNCTION void slm_init(uint32_t size) {
-  __esimd_slm_init(size);
-}
+SYCL_EXTERNAL SYCL_ESIMD_FUNCTION void slm_init(uint32_t size);
 
 /// SLM gather.
 ///
@@ -928,6 +926,12 @@ media_block_store(AccessorTy acc, unsigned x, unsigned y, simd<T, m * n> vals) {
                                                                  vals.data());
   }
 }
+
+#ifndef __SYCL_DEVICE_ONLY__
+
+inline void slm_init(uint32_t size) { __esimd_slm_init(size); }
+
+#endif
 
 /// esimd_get_value
 ///

@@ -36,7 +36,7 @@ namespace cm_support {
 #include <CL/sycl/backend_types.hpp>
 #include <CL/sycl/detail/pi.hpp>
 #include <sycl/ext/intel/experimental/esimd/detail/atomic_intrin.hpp>
-#include <sycl/ext/intel/experimental/esimd/emu/detail/esimdcpu_device_interface.hpp>
+#include <sycl/ext/intel/experimental/esimd/emu/detail/esimd_emulator_device_interface.hpp>
 
 inline void __esimd_emu_pi_load_check() {
   try {
@@ -512,20 +512,6 @@ __esimd_svm_atomic2(__SEIEED::vector_type_t<uint64_t, N> addrs,
 #else
 {
   throw cl::sycl::feature_not_supported();
-}
-#endif // __SYCL_DEVICE_ONLY__
-
-__ESIMD_INTRIN void __esimd_slm_init(size_t size)
-#ifdef __SYCL_DEVICE_ONLY__
-    ;
-#else
-{
-  __esimd_emu_pi_load_check();
-
-  sycl::detail::ESIMDDeviceInterface *I =
-      sycl::detail::getESIMDDeviceInterface();
-
-  I->cm_slm_init_ptr(size);
 }
 #endif // __SYCL_DEVICE_ONLY__
 
@@ -1236,3 +1222,13 @@ __ESIMD_INTRIN void __esimd_raw_send2_noresult(
   throw cl::sycl::feature_not_supported();
 }
 #endif // __SYCL_DEVICE_ONLY__
+
+// Initializing SLM
+#ifndef __SYCL_DEVICE_ONLY__
+__ESIMD_INTRIN void __esimd_slm_init(size_t size) {
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
+
+  I->cm_slm_init_ptr(size);
+}
+#endif // ifndef __SYCL_DEVICE_ONLY__
