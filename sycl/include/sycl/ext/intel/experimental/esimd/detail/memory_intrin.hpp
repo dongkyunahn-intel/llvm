@@ -19,6 +19,38 @@
 
 #include <cstdint>
 
+#ifndef __SYCL_DEVICE_ONLY__
+/// ESIMD_CPU Emulation support using esimd_cpu plugin
+
+/// Definition macro to be referenced in CM header files for
+/// preventing build failure caused by symbol conflicts between llvm
+/// and CM - e.g. vector.
+#define __SYCL_EXPLICIT_SIMD_PLUGIN__
+
+// Header files required for accessing CM-managed resources - image,
+// buffer, runtime API etc.
+namespace cm_support {
+#include <CL/cm_rt.h>
+} // namespace cm_support
+
+#include <CL/sycl/backend_types.hpp>
+#include <CL/sycl/detail/pi.hpp>
+#include <sycl/ext/intel/experimental/esimd/detail/atomic_intrin.hpp>
+#include <sycl/ext/intel/experimental/esimd/emu/detail/esimdcpu_device_interface.hpp>
+
+inline void __esimd_emu_pi_load_check() {
+  try {
+    sycl::detail::pi::getPlugin<sycl::backend::esimd_cpu>();
+  } catch (...) {
+    std::cerr << "ESIMD EMU plugin error or not loaded - try setting "
+                 "SYCL_DEVICE_FILTER=esimd_emu:gpu environment variable"
+              << std::endl;
+    throw cl::sycl::feature_not_supported();
+  }
+}
+
+#endif // ifndef __SYCL_DEVICE_ONLY__
+
 __SYCL_INLINE_NAMESPACE(cl) {
 namespace sycl {
 namespace ext {
@@ -35,7 +67,7 @@ public:
   static auto getNativeImageObj(const AccessorTy &Acc) {
     return Acc.getNativeImageObj();
   }
-#else
+#else  // __SYCL_DEVICE_ONLY__
   template <typename AccessorTy>
   static auto getImageRange(const AccessorTy &Acc) {
     return Acc.getAccessRange();
@@ -43,7 +75,10 @@ public:
   static auto getElemSize(const sycl::detail::AccessorBaseHost &Acc) {
     return Acc.getElemSize();
   }
-#endif
+  static void *getPtr(const sycl::detail::AccessorBaseHost &Acc) {
+    return Acc.getPtr();
+  }
+#endif // __SYCL_DEVICE_ONLY__
 };
 
 template <int ElemsPerAddr,
@@ -198,7 +233,25 @@ __ESIMD_INTRIN void __esimd_oword_st(SurfIndAliasTy surf_ind, uint32_t offset,
     ;
 #else
 {
-  throw cl::sycl::feature_not_supported();
+  __esimd_emu_pi_load_check();
+
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
+  if (surf_ind == __SEIEE::detail::SLM_BTI) {
+    // O-word/Block store for Shared Local Memory
+    // __SEIEE::detail::SLM_BTI is special binding table index for SLM
+    char *SlmBase = I->__cm_emu_get_slm_ptr();
+    offset <<= 4;
+    for (int i = 0; i < N; ++i) {
+      Ty *SlmAddr = reinterpret_cast<Ty *>(offset + SlmBase);
+      *SlmAddr = vals[i];
+      offset += sizeof(Ty);
+    }
+  } else {
+    // O-word/Block store for regular surface indexed by surf_ind
+    // TODO : Enable when called from memory.hpp
+    throw cl::sycl::feature_not_supported();
+  }
 }
 #endif // __SYCL_DEVICE_ONLY__
 
@@ -388,7 +441,28 @@ __esimd_scatter_scaled(__SEIEED::simd_mask_storage_t<N> pred,
   static_assert(N == 1 || N == 8 || N == 16 || N == 32);
   static_assert(TySizeLog2 <= 2);
   static_assert(std::is_integral<Ty>::value || TySizeLog2 == 2);
-  throw cl::sycl::feature_not_supported();
+
+  __esimd_emu_pi_load_check();
+
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
+
+  if (surf_ind == __SEIEE::detail::SLM_BTI) {
+    // Scattered-store for Shared Local Memory
+    // __SEIEE::detail::SLM_BTI is special binding table index for SLM
+    assert(global_offset == 0);
+    char *SlmBase = I->__cm_emu_get_slm_ptr();
+    for (int i = 0; i < N; ++i) {
+      if (pred[i]) {
+        Ty *addr = reinterpret_cast<Ty *>(elem_offsets[i] + SlmBase);
+        *addr = vals[i];
+      }
+    }
+  } else {
+    // Scattered-store for regular surface indexed by surf_ind
+    // TODO : Enable
+    throw cl::sycl::feature_not_supported();
+  }
 }
 #endif // __SYCL_DEVICE_ONLY__
 
@@ -441,13 +515,32 @@ __esimd_svm_atomic2(__SEIEED::vector_type_t<uint64_t, N> addrs,
 }
 #endif // __SYCL_DEVICE_ONLY__
 
+__ESIMD_INTRIN void __esimd_slm_init(size_t size)
+#ifdef __SYCL_DEVICE_ONLY__
+    ;
+#else
+{
+  __esimd_emu_pi_load_check();
+
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
+
+  I->cm_slm_init_ptr(size);
+}
+#endif // __SYCL_DEVICE_ONLY__
+
 // esimd_barrier, generic group barrier
 __ESIMD_INTRIN void __esimd_barrier()
 #ifdef __SYCL_DEVICE_ONLY__
     ;
 #else
 {
-  throw cl::sycl::feature_not_supported();
+  __esimd_emu_pi_load_check();
+
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
+
+  I->cm_barrier_ptr();
 }
 #endif // __SYCL_DEVICE_ONLY__
 
@@ -457,7 +550,12 @@ __ESIMD_INTRIN void __esimd_sbarrier(__SEIEE::split_barrier_action flag)
     ;
 #else
 {
-  throw cl::sycl::feature_not_supported();
+  __esimd_emu_pi_load_check();
+
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
+
+  I->cm_sbarrier_ptr((uint32_t)flag);
 }
 #endif // __SYCL_DEVICE_ONLY__
 
@@ -467,7 +565,11 @@ __ESIMD_INTRIN void __esimd_fence(uint8_t cntl)
     ;
 #else
 {
-  throw cl::sycl::feature_not_supported();
+  __esimd_emu_pi_load_check();
+
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
+  I->cm_fence_ptr();
 }
 #endif // __SYCL_DEVICE_ONLY__
 
@@ -482,7 +584,29 @@ __esimd_gather_scaled(__SEIEED::simd_mask_storage_t<N> pred,
     ;
 #else
 {
-  throw cl::sycl::feature_not_supported();
+  __esimd_emu_pi_load_check();
+
+  __SEIEED::vector_type_t<Ty, N> retv;
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
+  if (surf_ind == __SEIEE::detail::SLM_BTI) {
+    // Scattered-load for Shared Local Memory
+    // __SEIEE::detail::SLM_BTI is special binding table index for SLM
+    assert(global_offset == 0);
+    char *SlmBase = I->__cm_emu_get_slm_ptr();
+    for (int i = 0; i < N; ++i) {
+      if (pred[i]) {
+        Ty *addr = reinterpret_cast<Ty *>(addrs[i] + SlmBase);
+        retv[i] = *addr;
+      }
+    }
+  } else {
+    // Scattered-load for regular surface indexed by surf_ind
+    // TODO : Enable
+    throw cl::sycl::feature_not_supported();
+  }
+
+  return retv;
 }
 #endif // __SYCL_DEVICE_ONLY__
 
@@ -495,7 +619,28 @@ __esimd_oword_ld(SurfIndAliasTy surf_ind, uint32_t addr)
     ;
 #else
 {
-  throw cl::sycl::feature_not_supported();
+  __esimd_emu_pi_load_check();
+
+  __SEIEED::vector_type_t<Ty, N> retv;
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
+
+  if (surf_ind == __SEIEE::detail::SLM_BTI) {
+    // O-word/Block load for Shared Local Memory
+    // __SEIEE::detail::SLM_BTI is special binding table index for SLM
+    char *SlmBase = I->__cm_emu_get_slm_ptr();
+    addr <<= 4;
+    for (int i = 0; i < N; ++i) {
+      Ty *SlmAddr = reinterpret_cast<Ty *>(addr + SlmBase);
+      retv[i] = *SlmAddr;
+      addr += sizeof(Ty);
+    }
+  } else {
+    // O-word/Block load for regular surface indexed by surf_ind
+    // TODO : Enable when called from memory.hpp
+    throw cl::sycl::feature_not_supported();
+  }
+  return retv;
 }
 #endif // __SYCL_DEVICE_ONLY__
 
@@ -510,7 +655,56 @@ __esimd_gather4_scaled(__SEIEED::simd_mask_storage_t<N> pred,
     ;
 #else
 {
-  throw cl::sycl::feature_not_supported();
+  __esimd_emu_pi_load_check();
+
+  __SEIEED::vector_type_t<Ty, N * get_num_channels_enabled(Mask)> retv;
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
+  char *ReadBase = I->__cm_emu_get_slm_ptr();
+
+  unsigned int Next = 0;
+  if (__SEIEE::is_channel_enabled(Mask, __SEIEE::rgba_channel::R)) {
+    for (int I = 0; I < N; I++, Next++) {
+      if (pred[I]) {
+        Ty *addr = reinterpret_cast<Ty *>(offsets[I] + ReadBase);
+        retv[Next] = *addr;
+      }
+    }
+  }
+
+  ReadBase += sizeof(Ty);
+
+  if (__SEIEE::is_channel_enabled(Mask, __SEIEE::rgba_channel::G)) {
+    for (int I = 0; I < N; I++, Next++) {
+      if (pred[I]) {
+        Ty *addr = reinterpret_cast<Ty *>(offsets[I] + ReadBase);
+        retv[Next] = *addr;
+      }
+    }
+  }
+
+  ReadBase += sizeof(Ty);
+
+  if (__SEIEE::is_channel_enabled(Mask, __SEIEE::rgba_channel::B)) {
+    for (int I = 0; I < N; I++, Next++) {
+      if (pred[I]) {
+        Ty *addr = reinterpret_cast<Ty *>(offsets[I] + ReadBase);
+        retv[Next] = *addr;
+      }
+    }
+  }
+
+  ReadBase += sizeof(Ty);
+
+  if (__SEIEE::is_channel_enabled(Mask, __SEIEE::rgba_channel::A)) {
+    for (int I = 0; I < N; I++, Next++) {
+      if (pred[I]) {
+        Ty *addr = reinterpret_cast<Ty *>(offsets[I] + ReadBase);
+        retv[Next] = *addr;
+      }
+    }
+  }
+  return retv;
 }
 #endif // __SYCL_DEVICE_ONLY__
 
@@ -525,7 +719,54 @@ __ESIMD_INTRIN void __esimd_scatter4_scaled(
     ;
 #else
 {
-  throw cl::sycl::feature_not_supported();
+  __esimd_emu_pi_load_check();
+
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
+  char *WriteBase = I->__cm_emu_get_slm_ptr();
+
+  unsigned int Next = 0;
+  if (__SEIEE::is_channel_enabled(Mask, __SEIEE::rgba_channel::R)) {
+    for (int I = 0; I < N; I++, Next++) {
+      if (pred[I]) {
+        Ty *addr = reinterpret_cast<Ty *>(offsets[I] + WriteBase);
+        *addr = vals[Next];
+      }
+    }
+  }
+
+  WriteBase += sizeof(Ty);
+
+  if (__SEIEE::is_channel_enabled(Mask, __SEIEE::rgba_channel::G)) {
+    for (int I = 0; I < N; I++, Next++) {
+      if (pred[I]) {
+        Ty *addr = reinterpret_cast<Ty *>(offsets[I] + WriteBase);
+        *addr = vals[Next];
+      }
+    }
+  }
+
+  WriteBase += sizeof(Ty);
+
+  if (__SEIEE::is_channel_enabled(Mask, __SEIEE::rgba_channel::B)) {
+    for (int I = 0; I < N; I++, Next++) {
+      if (pred[I]) {
+        Ty *addr = reinterpret_cast<Ty *>(offsets[I] + WriteBase);
+        *addr = vals[Next];
+      }
+    }
+  }
+
+  WriteBase += sizeof(Ty);
+
+  if (__SEIEE::is_channel_enabled(Mask, __SEIEE::rgba_channel::A)) {
+    for (int I = 0; I < N; I++, Next++) {
+      if (pred[I]) {
+        Ty *addr = reinterpret_cast<Ty *>(offsets[I] + WriteBase);
+        *addr = vals[Next];
+      }
+    }
+  }
 }
 #endif // __SYCL_DEVICE_ONLY__
 
@@ -539,7 +780,30 @@ __esimd_dword_atomic0(__SEIEED::simd_mask_storage_t<N> pred,
     ;
 #else
 {
-  throw cl::sycl::feature_not_supported();
+  __esimd_emu_pi_load_check();
+
+  if (surf_ind == __SEIEE::detail::SLM_BTI) {
+    __SEIEED::vector_type_t<Ty, N> retv;
+    sycl::detail::ESIMDDeviceInterface *I =
+        sycl::detail::getESIMDDeviceInterface();
+    char *WriteBase = I->__cm_emu_get_slm_ptr();
+
+    for (int i = 0; i < N; i++) {
+      if (pred[i]) {
+        Ty *p = reinterpret_cast<Ty *>(addrs[i] + WriteBase);
+
+        switch (Op) {
+        case __SEIEE::atomic_op::inc:
+          retv[i] = atomic_add_fetch<Ty>(p, 1);
+          break;
+        default:
+          throw cl::sycl::feature_not_supported();
+        }
+      }
+    }
+  } else {
+    throw cl::sycl::feature_not_supported();
+  }
 }
 #endif // __SYCL_DEVICE_ONLY__
 
@@ -593,48 +857,111 @@ __esimd_media_ld(TACC handle, unsigned x, unsigned y)
     ;
 #else
 {
-  // On host the input surface is modeled as sycl image 2d object,
-  // and the read/write access is done through accessor,
-  // which is passed in as the handle argument.
-  auto range = __SEIEED::AccessorPrivateProxy::getImageRange(handle);
-  unsigned bpp = __SEIEED::AccessorPrivateProxy::getElemSize(handle);
-  unsigned vpp = bpp / sizeof(Ty);
-  unsigned int i = x / bpp;
-  unsigned int j = y;
-
-  assert(x % bpp == 0);
-  unsigned int xbound = range[0] - 1;
-  unsigned int ybound = range[1] - 1;
+  __esimd_emu_pi_load_check();
 
   __SEIEED::vector_type_t<Ty, M * N> vals;
-  for (int row = 0; row < M; row++) {
-    for (int col = 0; col < N; col += vpp) {
-      unsigned int xoff = (i > xbound) ? xbound : i;
-      unsigned int yoff = (j > ybound) ? ybound : j;
-      auto coords = cl::sycl::cl_int2(xoff, yoff);
-      cl::sycl::cl_uint4 data = handle.read(coords);
 
-      __SEIEED::vector_type_t<unsigned int, 4> res;
-      for (int idx = 0; idx < 4; idx++) {
-        res[idx] = data[idx];
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
+
+  char *readBase;
+  uint32_t bpp;
+  uint32_t imgWidth;
+  uint32_t imgHeight;
+  std::mutex *mutexLock;
+
+  auto ImageHandle = __SEIEED::AccessorPrivateProxy::getPtr(handle);
+
+  I->sycl_get_cm_image_params_ptr(ImageHandle, &readBase, &imgWidth, &imgHeight,
+                                  &bpp, &mutexLock);
+
+  std::unique_lock<std::mutex> lock(*mutexLock);
+
+  int x_pos_a, y_pos_a, offset, index;
+
+  // TODO : Remove intermediate 'in' matrix
+  std::vector<std::vector<Ty>> in(M, std::vector<Ty>(N));
+  int R = M;
+  int C = N;
+  for (int i = 0; i < R; i++) {
+    for (int j = 0; j < C; j++) {
+      x_pos_a = x + j * sizeof(Ty);
+      { y_pos_a = y + i; }
+      // We should check the boundary condition based on sizeof(Ty), x_pos_a is
+      // 0-based Note: Use a signed variable; otherwise sizeof(Ty) is unsigned
+      if ((x_pos_a + sizeof(Ty)) > imgWidth) {
+        // If we're trying to read outside the boundary, limit the value of
+        // x_pos_a Assumption -- We don't this situation:
+        //         x_pos_a  width's boundary
+        //           |      |
+        //           <---type(Ty)--->
+        // At most x_pos_a+sizeof(Ty) is exactly at the boundary.
+        x_pos_a = imgWidth;
+      }
+      if (y_pos_a > imgHeight - 1) {
+        y_pos_a = imgHeight - 1;
+      }
+      if (y_pos_a < 0) {
+        y_pos_a = 0;
+      }
+      {
+        if (x_pos_a < 0) {
+          // Need to align x position to bbp
+          int offset = x % bpp;
+          x_pos_a -= offset;
+        }
+        while (x_pos_a < 0) {
+          // If we're trying to read outside the left boundary, increase x_pos_a
+          x_pos_a += bpp;
+        }
       }
 
-      constexpr int refN = sizeof(cl::sycl::cl_uint4) / sizeof(Ty);
-      unsigned int stride = sizeof(cl::sycl::cl_uint4) / bpp;
-      using refTy = __SEIEED::vector_type_t<Ty, refN>;
-      auto ref = reinterpret_cast<refTy>(res);
+      if (x_pos_a >= imgWidth) {
+        {
+          x_pos_a = x_pos_a - bpp;
+          for (uint byte_count = 0; byte_count < sizeof(Ty); byte_count++) {
+            if (x_pos_a >= imgWidth) {
+              x_pos_a = x_pos_a - bpp;
+            }
+            offset = y_pos_a * imgWidth + x_pos_a;
 
-      unsigned int offset1 = col + row * N;
-      unsigned int offset2 = 0;
-      for (int idx = 0; idx < vpp; idx++) {
-        vals[offset1] = ref[offset2];
-        offset1++;
-        offset2 += stride;
+            /*
+              If destination size per element is less then or equal pixel size
+              of the surface move the pixel value accross the destination
+              elements. If destination size per element is greater then pixel
+              size of the surface replicate pixel value in the destination
+              element.
+            */
+            if (sizeof(Ty) <= bpp) {
+              for (uint bpp_count = 0; j < C && bpp_count < bpp;
+                   j++, bpp_count += sizeof(Ty)) {
+                in[i][j] = *((Ty *)(readBase + offset + bpp_count));
+              }
+              j--;
+              break;
+            } else {
+              // ((unsigned char*)in.get_addr(i*C+j))[byte_count] = *((unsigned
+              // char*)((char*)buff_iter->p + offset));
+              unsigned char *pTempBase =
+                  ((unsigned char *)in[i].data()) + j * sizeof(Ty);
+              pTempBase[byte_count] = *((unsigned char *)(readBase + offset));
+            }
+
+            x_pos_a = x_pos_a + 1;
+          }
+          x_pos_a = imgWidth;
+        }
+      } else {
+        offset = y_pos_a * imgWidth + x_pos_a;
+        { in[i][j] = *((Ty *)(readBase + offset)); }
       }
-      i++;
     }
-    i = x / bpp;
-    j++;
+  }
+
+  for (auto i = 0, k = 0; i < M; i++) {
+    for (auto j = 0; j < N; j++) {
+      vals[k++] = in[i][j];
+    }
   }
 
   return vals;
@@ -663,45 +990,62 @@ __ESIMD_INTRIN void __esimd_media_st(TACC handle, unsigned x, unsigned y,
     ;
 #else
 {
-  unsigned bpp = __SEIEED::AccessorPrivateProxy::getElemSize(handle);
-  unsigned vpp = bpp / sizeof(Ty);
-  auto range = __SEIEED::AccessorPrivateProxy::getImageRange(handle);
-  unsigned int i = x / bpp;
-  unsigned int j = y;
+  __esimd_emu_pi_load_check();
 
-  assert(x % bpp == 0);
+  sycl::detail::ESIMDDeviceInterface *I =
+      sycl::detail::getESIMDDeviceInterface();
 
-  for (int row = 0; row < M; row++) {
-    for (int col = 0; col < N; col += vpp) {
-      constexpr int Sz = sizeof(cl::sycl::cl_uint4) / sizeof(Ty);
-      __SEIEED::vector_type_t<Ty, Sz> res = 0;
+  char *writeBase;
+  uint32_t bpp;
+  uint32_t imgWidth;
+  uint32_t imgHeight;
+  std::mutex *mutexLock;
 
-      unsigned int offset1 = col + row * N;
-      unsigned int offset2 = 0;
-      unsigned int stride = sizeof(cl::sycl::cl_uint4) / bpp;
-      for (int idx = 0; idx < vpp; idx++) {
-        res[offset2] = vals[offset1];
-        offset1++;
-        offset2 += stride;
-      }
+  auto ImageHandle = __SEIEED::AccessorPrivateProxy::getPtr(handle);
 
-      using refTy = __SEIEED::vector_type_t<unsigned int, 4>;
-      auto ref = reinterpret_cast<refTy>(res);
+  I->sycl_get_cm_image_params_ptr(ImageHandle, &writeBase, &imgWidth,
+                                  &imgHeight, &bpp, &mutexLock);
 
-      cl::sycl::cl_uint4 data;
-      for (int idx = 0; idx < 4; idx++) {
-        data[idx] = ref[idx];
-      }
+  int x_pos_a, y_pos_a, offset;
 
-      if (i < range[0] && j < range[1]) {
-        auto coords = cl::sycl::cl_int2(i, j);
-        handle.write(coords, data);
-      }
-      i++;
+  assert((x % 4) == 0);
+  assert((N * sizeof(Ty)) % 4 == 0);
+
+  // TODO : Remove intermediate 'out' matrix
+  std::vector<std::vector<Ty>> out(M, std::vector<Ty>(N));
+
+  std::unique_lock<std::mutex> lock(*mutexLock);
+
+  for (int i = 0, k = 0; i < M; i++) {
+    for (int j = 0; j < N; j++) {
+      out[i][j] = vals[k++];
     }
-    i = x / bpp;
-    j++;
   }
+
+  for (int i = 0; i < M; i++) {
+    for (int j = 0; j < N; j++) {
+      x_pos_a = x + j * sizeof(Ty);
+      { y_pos_a = y + i; }
+      if ((int)x_pos_a < 0) {
+        continue;
+      }
+      if ((int)y_pos_a < 0) {
+        continue;
+      }
+      if ((int)(x_pos_a + sizeof(Ty)) > imgWidth) {
+        continue;
+      }
+
+      if ((int)y_pos_a > imgHeight - 1) {
+        continue;
+      }
+      offset = y_pos_a * imgWidth + x_pos_a;
+      *((Ty *)(writeBase + offset)) = out[i][j];
+    }
+  }
+
+  /// TODO : Optimize
+  I->cm_fence_ptr();
 }
 #endif // __SYCL_DEVICE_ONLY__
 
