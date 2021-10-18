@@ -134,11 +134,12 @@ public:
       return BackendPtr;
 
     const char *ValStr = BaseT::getRawValue();
-    const std::array<std::pair<std::string, backend>, 5> SyclBeMap = {
+    const std::array<std::pair<std::string, backend>, 6> SyclBeMap = {
         {{"PI_OPENCL", backend::opencl},
          {"PI_LEVEL_ZERO", backend::level_zero},
          {"PI_LEVEL0", backend::level_zero}, // for backward compatibility
          {"PI_CUDA", backend::cuda},
+         {"PI_ESIMD_EMULATOR", backend::ext_intel_esimd_emulator},
          {"PI_HIP", backend::hip}}};
     if (ValStr) {
       auto It = std::find_if(
@@ -148,7 +149,8 @@ public:
           });
       if (It == SyclBeMap.end())
         pi::die("Invalid backend. "
-                "Valid values are PI_OPENCL/PI_LEVEL_ZERO/PI_CUDA/PI_HIP");
+                "Valid values are "
+                "PI_OPENCL/PI_LEVEL_ZERO/PI_CUDA/PI_ESIMD_EMULATOR/PI_HIP");
       static backend Backend = It->second;
       BackendPtr = &Backend;
     }
@@ -242,7 +244,7 @@ const std::array<std::pair<std::string, info::device_type>, 5> &
 getSyclDeviceTypeMap();
 
 // Array is used by SYCL_DEVICE_FILTER and SYCL_DEVICE_ALLOWLIST
-const std::array<std::pair<std::string, backend>, 6> &getSyclBeMap();
+const std::array<std::pair<std::string, backend>, 7> &getSyclBeMap();
 
 template <> class SYCLConfig<SYCL_DEVICE_FILTER> {
   using BaseT = SYCLConfigBase<SYCL_DEVICE_FILTER>;
