@@ -665,13 +665,13 @@ simd_obj_impl<T, N, T1, SFINAE>::copy_from(AccessorT acc, uint32_t offset) {
                 "block must be 1, 2, 4 or 8 owords long");
   static_assert(Sz <= 8 * OperandSize::OWORD,
                 "block size must be at most 8 owords");
-#if defined(__SYCL_DEVICE_ONLY__)
   auto surf_ind =
+#if defined(__SYCL_DEVICE_ONLY__)
       __esimd_get_surface_index(AccessorPrivateProxy::getNativeImageObj(acc));
+#else  // SYCL_DEVICE_ONLY
+      __esimd_get_surface_index(acc);
+#endif // SYCL_DEVICE_ONLY
   *this = __esimd_oword_ld_unaligned<T, N>(surf_ind, offset);
-#else
-  *this = __esimd_oword_ld_unaligned<T, N>(acc, offset);
-#endif // __SYCL_DEVICE_ONLY__
 }
 
 template <typename T, int N, class T1, class SFINAE>
@@ -705,13 +705,13 @@ simd_obj_impl<T, N, T1, SFINAE>::copy_to(AccessorT acc, uint32_t offset) {
   static_assert(Sz <= 8 * OperandSize::OWORD,
                 "block size must be at most 8 owords");
 
-#if defined(__SYCL_DEVICE_ONLY__)
   auto surf_ind =
+#if defined(__SYCL_DEVICE_ONLY__)
       __esimd_get_surface_index(AccessorPrivateProxy::getNativeImageObj(acc));
+#else  // SYCL_DEVICE_ONLY
+      __esimd_get_surface_index(acc);
+#endif // SYCL_DEVICE_ONLY
   __esimd_oword_st<T, N>(surf_ind, offset >> 4, data());
-#else
-  __esimd_oword_st<T, N>(acc, offset >> 4, data());
-#endif // __SYCL_DEVICE_ONLY__
 }
 } // namespace detail
 

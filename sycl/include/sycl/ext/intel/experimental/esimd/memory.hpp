@@ -42,23 +42,19 @@ struct LocalAccessorMarker {};
 /// \ingroup sycl_esimd
 template <typename AccessorTy>
 ESIMD_INLINE ESIMD_NODEBUG SurfaceIndex get_surface_index(AccessorTy acc) {
-#ifdef __SYCL_DEVICE_ONLY__
   if constexpr (std::is_same_v<detail::LocalAccessorMarker, AccessorTy>) {
     return detail::SLM_BTI;
   } else {
+#ifdef __SYCL_DEVICE_ONLY__
     const auto mem_obj = detail::AccessorPrivateProxy::getNativeImageObj(acc);
     return __esimd_get_surface_index(mem_obj);
-  }
 #else
-  throw cl::sycl::feature_not_supported();
+    return __esimd_get_surface_index(acc);
 #endif
+  }
 }
 
-#ifdef __SYCL_DEVICE_ONLY__
 #define __ESIMD_GET_SURF_HANDLE(acc) get_surface_index(acc)
-#else
-#define __ESIMD_GET_SURF_HANDLE(acc) acc
-#endif // __SYCL_DEVICE_ONLY__
 
 // TODO @Pennycook
 // {quote}

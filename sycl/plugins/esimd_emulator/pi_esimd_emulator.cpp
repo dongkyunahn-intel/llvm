@@ -907,6 +907,18 @@ pi_result piMemRelease(pi_mem Mem) {
       return PI_INVALID_MEM_OBJECT;
     }
 
+    // Removing Surface-map entry
+    auto MapEntryIt = PiESimdSurfaceMap->find(Mem->SurfaceIndex);
+    if (MapEntryIt != PiESimdSurfaceMap->end()) {
+      PiESimdSurfaceMap->erase(MapEntryIt);
+    } else {
+      if (PrintPiTrace) {
+        std::cerr << "Failure from CM-managed buffer/image deletion"
+                  << std::endl;
+      }
+      return PI_INVALID_MEM_OBJECT;
+    }
+
     delete Mem;
   }
 
