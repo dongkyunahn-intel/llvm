@@ -123,6 +123,9 @@ static sycl::detail::ESIMDEmuPluginOpaqueData *PiESimdDeviceAccess;
 // interface header file
 #define ESIMDEmuPluginInterfaceVersion 1
 
+// For PI_DEVICE_INFO_DRIVER_VERSION info
+static char ESimdEmuVersionString[32];
+
 using IDBuilder = sycl::detail::Builder;
 
 template <int NDims>
@@ -499,7 +502,13 @@ pi_result piDeviceGetInfo(pi_device Device, pi_device_info ParamName,
   case PI_DEVICE_INFO_IMAGE_SUPPORT:
     return ReturnValue(pi_bool{true});
   case PI_DEVICE_INFO_DRIVER_VERSION:
-    return ReturnValue("0.0.1");
+    /// Combination of ESIMDEmuPluginDataVersion and
+    /// ESIMDEmuPluginInterfaceVersion : 0.a.b
+    /// a : ESIMDEmuPluginInterfaceVersion
+    /// b : ESIMDEmuPluginDataVersion
+    sprintf(ESimdEmuVersionString, "0.%d.%d", ESIMDEmuPluginInterfaceVersion,
+            ESIMDEmuPluginDataVersion);
+    return ReturnValue(ESimdEmuVersionString);
   case PI_DEVICE_INFO_VENDOR:
     return ReturnValue("Intel(R) Corporation");
   case PI_DEVICE_INFO_IMAGE2D_MAX_WIDTH:
@@ -513,6 +522,10 @@ pi_result piDeviceGetInfo(pi_device Device, pi_device_info ParamName,
     // cl_khr_fp64, cl_khr_int64_base_atomics,
     // cl_khr_int64_extended_atomics
     return ReturnValue("");
+  case PI_DEVICE_INFO_VERSION:
+    // CM_EMU release version from
+    // https://github.com/intel/cm-cpu-emulation/releases
+    return ReturnValue("1.0.7");
 
 #define UNSUPPORTED_INFO(info)                                                 \
   case info:                                                                   \
@@ -535,7 +548,6 @@ pi_result piDeviceGetInfo(pi_device Device, pi_device_info ParamName,
     UNSUPPORTED_INFO(PI_DEVICE_INFO_GLOBAL_MEM_SIZE)
     UNSUPPORTED_INFO(PI_DEVICE_INFO_LOCAL_MEM_SIZE)
     UNSUPPORTED_INFO(PI_DEVICE_INFO_AVAILABLE)
-    UNSUPPORTED_INFO(PI_DEVICE_INFO_VERSION)
     UNSUPPORTED_INFO(PI_DEVICE_INFO_PARTITION_MAX_SUB_DEVICES)
     UNSUPPORTED_INFO(PI_DEVICE_INFO_REFERENCE_COUNT)
     UNSUPPORTED_INFO(PI_DEVICE_INFO_PARTITION_PROPERTIES)
