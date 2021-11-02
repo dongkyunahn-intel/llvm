@@ -573,6 +573,52 @@ private:
    * functor itself is again encapsulated in a std::function since functor’s
    * type is unknown to the plugin.
    */
+  template <typename KernelType, int Dims, typename ArgT>
+  struct NormalizedKernelStruct;
+
+  template <typename KernelType, int Dims>
+  struct NormalizedKernelStruct<KernelType, Dims, sycl::id<Dims>> {
+    KernelType MKernelFunc;
+    NormalizedKernelStruct(const KernelType &KernelFunc)
+        : MKernelFunc(KernelFunc) {}
+    void operator()(const nd_item<Dims> &Arg) {
+      detail::runKernelWithArg(MKernelFunc, Arg.get_global_id());
+    }
+  };
+
+  template <typename KernelType, int Dims>
+  struct NormalizedKernelStruct<KernelType, Dims, sycl::nd_item<Dims>> {
+    KernelType MKernelFunc;
+    NormalizedKernelStruct(const KernelType &KernelFunc)
+        : MKernelFunc(KernelFunc) {}
+    void operator()(const nd_item<Dims> &Arg) {
+      detail::runKernelWithArg(MKernelFunc, Arg);
+    }
+  };
+
+  template <typename KernelType, int Dims>
+  struct NormalizedKernelStruct<KernelType, Dims, sycl::item<Dims, false>> {
+    KernelType MKernelFunc;
+    NormalizedKernelStruct(const KernelType &KernelFunc)
+        : MKernelFunc(KernelFunc) {}
+    void operator()(const nd_item<Dims> &Arg) {
+      sycl::item<Dims, false> Item = detail::Builder::createItem<Dims, false>(
+          Arg.get_global_range(), Arg.get_global_id());
+      detail::runKernelWithArg(MKernelFunc, Item);
+    }
+  };
+
+  template <typename KernelType, int Dims>
+  struct NormalizedKernelStruct<KernelType, Dims, sycl::item<Dims, true>> {
+    KernelType MKernelFunc;
+    NormalizedKernelStruct(const KernelType &KernelFunc)
+        : MKernelFunc(KernelFunc) {}
+    void operator()(const nd_item<Dims> &Arg) {
+      sycl::item<Dims, true> Item = detail::Builder::createItem<Dims, true>(
+          Arg.get_global_range(), Arg.get_global_id(), Arg.get_offset());
+      detail::runKernelWithArg(MKernelFunc, Item);
+    }
+  };
 
   // For 'id, item w/wo offset, nd_item' kernel arguments
   template <class KernelType, class NormalizedKernelType, int Dims,
@@ -590,76 +636,14 @@ private:
                 ->MKernelFunc;
   }
 
-  // For 'sycl::id<Dims>' kernel argument
   template <class KernelType, typename ArgT, int Dims, typename KernelName>
-  typename std::enable_if<std::is_same<ArgT, sycl::id<Dims>>::value,
+  typename std::enable_if<!std::is_same<ArgT, void>::value &&
+                              !std::is_same<ArgT, sycl::group<Dims>>::value,
                           KernelType *>::type
   ResetHostKernel(const KernelType &KernelFunc) {
-    struct NormalizedKernelType {
-      KernelType MKernelFunc;
-      NormalizedKernelType(const KernelType &KernelFunc)
-          : MKernelFunc(KernelFunc) {}
-      void operator()(const nd_item<Dims> &Arg) {
-        detail::runKernelWithArg(MKernelFunc, Arg.get_global_id());
-      }
-    };
-    return ResetHostKernelHelper<KernelType, struct NormalizedKernelType, Dims,
-                                 KernelName>(KernelFunc);
-  }
-
-  // For 'sycl::nd_item<Dims>' kernel argument
-  template <class KernelType, typename ArgT, int Dims, typename KernelName>
-  typename std::enable_if<std::is_same<ArgT, sycl::nd_item<Dims>>::value,
-                          KernelType *>::type
-  ResetHostKernel(const KernelType &KernelFunc) {
-    struct NormalizedKernelType {
-      KernelType MKernelFunc;
-      NormalizedKernelType(const KernelType &KernelFunc)
-          : MKernelFunc(KernelFunc) {}
-      void operator()(const nd_item<Dims> &Arg) {
-        detail::runKernelWithArg(MKernelFunc, Arg);
-      }
-    };
-    return ResetHostKernelHelper<KernelType, struct NormalizedKernelType, Dims,
-                                 KernelName>(KernelFunc);
-  }
-
-  // For 'sycl::item<Dims, without_offset>' kernel argument
-  template <class KernelType, typename ArgT, int Dims, typename KernelName>
-  typename std::enable_if<std::is_same<ArgT, sycl::item<Dims, false>>::value,
-                          KernelType *>::type
-  ResetHostKernel(const KernelType &KernelFunc) {
-    struct NormalizedKernelType {
-      KernelType MKernelFunc;
-      NormalizedKernelType(const KernelType &KernelFunc)
-          : MKernelFunc(KernelFunc) {}
-      void operator()(const nd_item<Dims> &Arg) {
-        sycl::item<Dims, false> Item = detail::Builder::createItem<Dims, false>(
-            Arg.get_global_range(), Arg.get_global_id());
-        detail::runKernelWithArg(MKernelFunc, Item);
-      }
-    };
-    return ResetHostKernelHelper<KernelType, struct NormalizedKernelType, Dims,
-                                 KernelName>(KernelFunc);
-  }
-
-  // For 'sycl::item<Dims, with_offset>' kernel argument
-  template <class KernelType, typename ArgT, int Dims, typename KernelName>
-  typename std::enable_if<std::is_same<ArgT, sycl::item<Dims, true>>::value,
-                          KernelType *>::type
-  ResetHostKernel(const KernelType &KernelFunc) {
-    struct NormalizedKernelType {
-      KernelType MKernelFunc;
-      NormalizedKernelType(const KernelType &KernelFunc)
-          : MKernelFunc(KernelFunc) {}
-      void operator()(const nd_item<Dims> &Arg) {
-        sycl::item<Dims, true> Item = detail::Builder::createItem<Dims, true>(
-            Arg.get_global_range(), Arg.get_global_id(), Arg.get_offset());
-        detail::runKernelWithArg(MKernelFunc, Item);
-      }
-    };
-    return ResetHostKernelHelper<KernelType, struct NormalizedKernelType, Dims,
-                                 KernelName>(KernelFunc);
+    return ResetHostKernelHelper<
+        KernelType, struct NormalizedKernelStruct<KernelType, Dims, ArgT>,
+        Dims, KernelName>(KernelFunc);
   }
 
   /* 'wrapper'-based approach using 'NormalizedKernelType' struct is
