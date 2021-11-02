@@ -621,9 +621,13 @@ private:
   };
 
   // For 'id, item w/wo offset, nd_item' kernel arguments
-  template <class KernelType, class NormalizedKernelType, int Dims,
-            typename KernelName>
-  KernelType *ResetHostKernelHelper(const KernelType &KernelFunc) {
+  template <class KernelType, typename ArgT, int Dims, typename KernelName>
+  typename std::enable_if<!std::is_same<ArgT, void>::value &&
+                              !std::is_same<ArgT, sycl::group<Dims>>::value,
+                          KernelType *>::type
+  ResetHostKernel(const KernelType &KernelFunc) {
+    using NormalizedKernelType =
+        struct NormalizedKernelStruct<KernelType, Dims, ArgT>;
     NormalizedKernelType NormalizedKernel(KernelFunc);
     auto NormalizedKernelFunc =
         std::function<void(const sycl::nd_item<Dims> &)>(NormalizedKernel);
@@ -636,18 +640,8 @@ private:
                 ->MKernelFunc;
   }
 
-  template <class KernelType, typename ArgT, int Dims, typename KernelName>
-  typename std::enable_if<!std::is_same<ArgT, void>::value &&
-                              !std::is_same<ArgT, sycl::group<Dims>>::value,
-                          KernelType *>::type
-  ResetHostKernel(const KernelType &KernelFunc) {
-    return ResetHostKernelHelper<
-        KernelType, struct NormalizedKernelStruct<KernelType, Dims, ArgT>,
-        Dims, KernelName>(KernelFunc);
-  }
-
-  /* 'wrapper'-based approach using 'NormalizedKernelType' struct is
-   * not applied for 'void(void)' type kernel and
+  /* 'wrapper'-based approach using 'NormalizedKernelStruct' is not
+   * applied for 'void(void)' type kernel and
    * 'void(sycl::group<Dims>)'. This is because 'void(void)' type does
    * not have argument to normalize and 'void(sycl::group<Dims>)' is
    * not supported in ESIMD.
