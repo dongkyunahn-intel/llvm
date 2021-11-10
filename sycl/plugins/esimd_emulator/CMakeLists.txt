@@ -64,6 +64,7 @@ else ()
     else()
       ExternalProject_Add(cm-emu
         GIT_REPOSITORY    https://github.com/intel/cm-cpu-emulation.git
+        GIT_HASH          22f9102c8702d97c0d2a0e1864c5bf974b83752b
         BINARY_DIR        ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_build
         INSTALL_DIR       ${CMAKE_CURRENT_BINARY_DIR}/cm-emu_install
         CMAKE_ARGS        -DLIBVA_INSTALL_PATH=/usr
