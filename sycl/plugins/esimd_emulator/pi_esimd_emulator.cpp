@@ -401,7 +401,7 @@ pi_result piPlatformGetInfo(pi_platform Platform, pi_platform_info ParamName,
     return ReturnValue("Intel(R) Corporation");
 
   case PI_PLATFORM_INFO_VERSION:
-    return ReturnValue(Platform->CmEmuVersion);
+    return ReturnValue(Platform->CmEmuVersion.c_str());
 
   case PI_PLATFORM_INFO_PROFILE:
     return ReturnValue("FULL_PROFILE");
@@ -525,7 +525,17 @@ pi_result piDeviceGetInfo(pi_device Device, pi_device_info ParamName,
   case PI_DEVICE_INFO_VERSION:
     // CM_EMU release version from
     // https://github.com/intel/cm-cpu-emulation/releases
-    return ReturnValue("1.0.7");
+    return ReturnValue("1.0.7-CM_EMU");
+  case PI_DEVICE_INFO_COMPILER_AVAILABLE:
+    return ReturnValue(pi_bool{false});
+  case PI_DEVICE_INFO_LINKER_AVAILABLE:
+    return ReturnValue(pi_bool{false});
+  case PI_DEVICE_INFO_MAX_COMPUTE_UNITS:
+    return ReturnValue(pi_uint32{256});
+  case PI_DEVICE_INFO_PARTITION_MAX_SUB_DEVICES:
+    return ReturnValue(pi_uint32{0});
+  case PI_DEVICE_INFO_PARTITION_PROPERTIES:
+    return ReturnValue(pi_device_partition_property{0});
 
 #define UNSUPPORTED_INFO(info)                                                 \
   case info:                                                                   \
@@ -536,9 +546,6 @@ pi_result piDeviceGetInfo(pi_device Device, pi_device_info ParamName,
     break;
 
     UNSUPPORTED_INFO(PI_DEVICE_INFO_VENDOR_ID)
-    UNSUPPORTED_INFO(PI_DEVICE_INFO_COMPILER_AVAILABLE)
-    UNSUPPORTED_INFO(PI_DEVICE_INFO_LINKER_AVAILABLE)
-    UNSUPPORTED_INFO(PI_DEVICE_INFO_MAX_COMPUTE_UNITS)
     UNSUPPORTED_INFO(PI_DEVICE_INFO_MAX_WORK_ITEM_DIMENSIONS)
     UNSUPPORTED_INFO(PI_DEVICE_INFO_MAX_WORK_GROUP_SIZE)
     UNSUPPORTED_INFO(PI_DEVICE_INFO_MAX_WORK_ITEM_SIZES)
@@ -548,9 +555,7 @@ pi_result piDeviceGetInfo(pi_device Device, pi_device_info ParamName,
     UNSUPPORTED_INFO(PI_DEVICE_INFO_GLOBAL_MEM_SIZE)
     UNSUPPORTED_INFO(PI_DEVICE_INFO_LOCAL_MEM_SIZE)
     UNSUPPORTED_INFO(PI_DEVICE_INFO_AVAILABLE)
-    UNSUPPORTED_INFO(PI_DEVICE_INFO_PARTITION_MAX_SUB_DEVICES)
     UNSUPPORTED_INFO(PI_DEVICE_INFO_REFERENCE_COUNT)
-    UNSUPPORTED_INFO(PI_DEVICE_INFO_PARTITION_PROPERTIES)
     UNSUPPORTED_INFO(PI_DEVICE_INFO_PARTITION_AFFINITY_DOMAIN)
     UNSUPPORTED_INFO(PI_DEVICE_INFO_PARTITION_TYPE)
     UNSUPPORTED_INFO(PI_DEVICE_INFO_OPENCL_C_VERSION)
