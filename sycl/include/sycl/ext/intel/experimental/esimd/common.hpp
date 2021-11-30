@@ -91,6 +91,11 @@ enum {
 /// Represents a pixel's channel.
 enum class rgba_channel : uint8_t { R, G, B, A };
 
+/// Surface index type. Surface is an internal representation of a memory block
+/// addressable by GPU in "stateful" memory model, and each surface is
+/// identified by its "binding table index" - surface index.
+using SurfaceIndex = unsigned int;
+
 namespace detail {
 template <rgba_channel Ch>
 static inline constexpr uint8_t ch = 1 << static_cast<int>(Ch);
@@ -98,6 +103,11 @@ static inline constexpr uint8_t chR = ch<rgba_channel::R>;
 static inline constexpr uint8_t chG = ch<rgba_channel::G>;
 static inline constexpr uint8_t chB = ch<rgba_channel::B>;
 static inline constexpr uint8_t chA = ch<rgba_channel::A>;
+
+// Shared Local Memory Binding Table Index (aka surface index).
+static inline constexpr SurfaceIndex SLM_BTI = 254;
+static inline constexpr SurfaceIndex INVALID_BTI =
+    static_cast<SurfaceIndex>(-1);
 } // namespace detail
 
 /// Represents a pixel's channel mask - all possible combinations of enabled
@@ -243,11 +253,6 @@ using EsimdSbarrierType = split_barrier_action;
 // deprecation message.
 #define ESIMD_SBARRIER_WAIT EsimdSbarrierType::WAIT
 #define ESIMD_SBARRIER_SIGNAL EsimdSbarrierType::SIGNAL
-
-/// Surface index type. Surface is an internal representation of a memory block
-/// addressable by GPU in "stateful" memory model, and each surface is
-/// identified by its "binding table index" - surface index.
-using SurfaceIndex = unsigned int;
 
 } // namespace esimd
 } // namespace experimental
